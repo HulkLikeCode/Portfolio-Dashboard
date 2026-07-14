@@ -1,13 +1,16 @@
-# Phase 5A Test and Snapshot Record
+# Phase 5A Acceptance and Snapshot Record
 
 ## Snapshot
 
 - Phase: 5A - Chart Manager
 - Test date: 2026-07-14
-- Source branch and commit: `main` at `72354f6`, including the current Phase 5A working-tree changes
+- Acceptance date: 2026-07-14
+- Source branch: `phase-5a`
+- Squash merge on `main`: `b30cc30`
+- Accepted tag: `phase-5a-accepted`
 - Source working folder: `MVP-Portfolio-Dash-4A-Validated`
 - Phase-labeled working-folder copy: `MVP-Portfolio-Dash-5A-Validated`
-- Snapshot basis: created in response to the owner's post-acceptance backup instruction
+- Snapshot basis: created in response to the owner's post-acceptance backup instruction and retained locally outside Git tracking
 
 ## Browser and device
 
@@ -33,9 +36,9 @@ No production Finnhub or Treasury request was made by these tests. The browser
 UI harness uses deterministic prepared data and a fake ECharts lifecycle
 adapter, so it does not claim live-provider or production-CDN validation.
 
-## Known limitations and remaining manual checks
+## Accepted limitations and remaining final-device checks
 
-- The roadmap still identifies physical iPhone 13 mini and Home Screen manual acceptance as pending. Portrait and landscape layout, safe-area insets, orientation changes, touch gestures, swipeable-tab interaction, and on-screen-keyboard behavior were not exercised on the target device in this session.
+- Phase 5A was accepted for the Phase 6A dependency gate. Physical iPhone 13 mini and Home Screen validation remains deferred to the Phase 1D/10A final device gates. Portrait and landscape layout, safe-area insets, orientation changes, touch gestures, swipeable-tab interaction, and on-screen-keyboard behavior were not exercised on the target device in this session.
 - Headless Firefox does not replace interactive desktop checks for repeated window resizing, keyboard/focus behavior, screen readers, or visual inspection under light and dark themes.
 - PNG export was verified as a safe filename and an `image/png` blob through the deterministic adapter. Exported image dimensions and legibility were not visually inspected with a real ECharts instance.
 - The test harness checked bounded resize calls and safe chart recreation, but it did not render the development CDN build of Apache ECharts 6.0.0 or validate offline behavior. ECharts remains scheduled for vendoring in Phase 10A.

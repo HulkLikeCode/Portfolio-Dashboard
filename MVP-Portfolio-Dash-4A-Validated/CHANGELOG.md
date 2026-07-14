@@ -4,6 +4,10 @@ All notable project specification and repository-workflow changes are recorded h
 
 ## [2.3-phase-5a] - 2026-07-14
 
+- Accepted Phase 5A through squash merge `b30cc30` and tag
+  `phase-5a-accepted`; advanced the active implementation gate to Phase 6A.
+- Retained the physical iPhone 13 mini and Home Screen checks as documented
+  limitations deferred to the Phase 1D/10A final device gates.
 - Added the Phase 5A Chart Manager with comparison, account-value, allocation,
   and drawdown support plus future Monte Carlo fan/band containers.
 - Added prepared-series contracts, all seven time filters, explicit series

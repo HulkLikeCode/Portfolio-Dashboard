@@ -33,11 +33,11 @@
 | Editor runtime | Electron 37.7.0; Chromium 138.0.7204.251; Node.js 22.20.0; V8 13.8.258.32-electron.0 |
 | Development OS | Darwin x64 20.6.0 |
 | VS Code workspace and Git root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard` |
-| Active project root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard/MVP-Portfolio-Dash-4A-Validated` |
-| Accepted source baseline | Phase 4A |
+| Active project root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard/MVP-Portfolio-Dash-5A-Validated` |
+| Accepted source baseline | Phase 5A, squash merge `b30cc30`, tag `phase-5a-accepted` |
 | Mandatory migration | Runtime-only Finnhub credential exclusion and GitHub Pages hosting |
-| Active gate | Phase 5A Chart Manager |
-| Next phase | Phase 6A after Phase 5A acceptance |
+| Active gate | Phase 6A Analytics Engine |
+| Next phase | Phase 7A after Phase 6A acceptance |
 | Deployment infrastructure | Phase 1D GitHub Pages HTTPS and iPhone installation |
 | Public runtime deployment | Required through GitHub Pages |
 | Application backend | Excluded; optional cloud synchronization remains in scope |
@@ -174,15 +174,16 @@ GitHub stores public source, documentation, committed Stooq files, credential-fr
 | Version 2.3 baseline migration | Implemented and locally validated | Commit to `main` and tag `v2.3-baseline` |
 | Phase 3B | Accepted | Portfolio UI and corporate-action workflow preserved |
 | Phase 4A | Accepted | Benchmark and active-symbol management preserved |
-| Phase 5A | Active | Implement and validate Chart Manager |
+| Phase 5A | Accepted | Chart Manager preserved with tag `phase-5a-accepted`; physical iPhone and Home Screen validation remains deferred to the Phase 1D/10A final device gates |
+| Phase 6A | Active | Implement and validate Analytics Engine |
 
 ## 2.1 Immediate action
 
-1. Open `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard` as the VS Code workspace and select `MVP-Portfolio-Dash-3A-Validated` as the active project root.
-2. Verify `origin` is `git@github.com:KCs-IRA-Dash-Monte-Carlo/Portfolio-Dashboard.git` and that SSH authentication works.
-3. Use the Codex extension connected to the owner's ChatGPT Plus subscription to review the locally validated Phase 3A and Version 2.3 baseline.
-4. Commit the consolidated baseline to `main`, preserve the Phase 3A tag, create the Version 2.3 baseline tag, and push the branch and tags.
-5. Create `phase-3b` from the tagged baseline only when Phase 3B work begins.
+1. Open `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard` as the VS Code workspace and select `MVP-Portfolio-Dash-5A-Validated` as the active project root.
+2. Verify `main` contains squash merge `b30cc30`, the accepted tag is `phase-5a-accepted`, and `origin` is `git@github.com:KCs-IRA-Dash-Monte-Carlo/Portfolio-Dashboard.git`.
+3. Start Phase 6A from updated `main` on a clean `phase-6a` branch.
+4. Use the Phase 6A execution packet, its allowed-file list, and the accepted Chart Manager contracts as the implementation boundary.
+5. Do not begin Phase 7A or any Monte Carlo implementation until Phase 6A is accepted.
 
 ## 2.2 Phase 3B boundary
 
@@ -2407,7 +2408,7 @@ and the other repository acceptance requirements above.
 
 
 # Phase 5A - Chart Manager
-**Status:** Implemented; physical iPhone and Home Screen manual acceptance pending
+**Status:** Accepted; physical iPhone and Home Screen validation deferred to the Phase 1D/10A final device gates
 
 ## Purpose
 
@@ -2628,11 +2629,14 @@ After merge, use a new repair branch and `git revert <merge-commit>`; do not res
 
 ## Phase notes
 
-Do not build Monte Carlo calculations in this phase; only shared visual infrastructure.
+Accepted by squash merge `b30cc30` and tag `phase-5a-accepted`. The recorded
+desktop-browser evidence and deferred physical-device limitations are in
+`docs/test-results/phase-5a-acceptance-2026-07-14.md`. Do not add Monte Carlo
+calculations to the accepted shared visual infrastructure.
 
 
 # Phase 6A - Analytics Engine
-**Status:** Not yet accepted
+**Status:** Active; ready to begin from `phase-5a-accepted`
 
 ## Purpose
 

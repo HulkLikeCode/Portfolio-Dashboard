@@ -23,8 +23,10 @@ If supporting documentation conflicts with either authoritative document,
 
 The repository contains the application shell, persistence and setup modules,
 historical-data pipeline, live-data services, portfolio engine, benchmark
-manager, and Phase 5A Chart Manager. A user-entered Finnhub key is kept only in
-page-session memory and removed from legacy Local Storage state.
+manager, and the accepted Phase 5A Chart Manager. Phase 5A is recorded by
+squash merge `b30cc30` and tag `phase-5a-accepted`; Phase 6A Analytics Engine
+is the next active gate. A user-entered Finnhub key is kept only in page-session
+memory and removed from legacy Local Storage state.
 
 ## Approved architecture
 
