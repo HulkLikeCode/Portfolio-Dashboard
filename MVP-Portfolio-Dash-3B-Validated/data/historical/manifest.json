@@ -1,0 +1,98 @@
+{
+  "manifestVersion": 1,
+  "datasetId": "stooq-private-seed",
+  "datasetVersion": "2026-07-09",
+  "datasetSha256": "b89a9f4d5532bfcb029d2215ec174d30e71ec90c79ba91786c25ca17f9634705",
+  "generatedAt": "2026-07-11T12:00:00.000Z",
+  "source": "Stooq",
+  "sourceFormat": "stooq-us-daily-ohlcv-text",
+  "frequency": "D",
+  "priceAdjustment": "split-adjusted",
+  "dividendAdjustment": "none",
+  "volumeSemantics": "source-provided; not assumed to be raw exchange share volume",
+  "privateLocalUseOnly": true,
+  "totalRecordCount": 34122,
+  "fileCount": 8,
+  "files": [
+    {
+      "symbol": "AVDV",
+      "sourceTicker": "AVDV.US",
+      "path": "seed/avdv.us.txt",
+      "sha256": "93f21eae50ff39529165f0e109f0fe673e1fd777fd80ca286b48d05dd63578a2",
+      "byteLength": 114851,
+      "recordCount": 1703,
+      "firstDate": "2019-09-27",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "AVUV",
+      "sourceTicker": "AVUV.US",
+      "path": "seed/avuv.us.txt",
+      "sha256": "75f06050d56b238e4b51f807a6dc933b3e3d0dc552d69237896916b5277ec86e",
+      "byteLength": 116218,
+      "recordCount": 1703,
+      "firstDate": "2019-09-27",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "DCO",
+      "sourceTicker": "DCO.US",
+      "path": "seed/dco.us.txt",
+      "sha256": "9225f4ca004614022683bdc4e6d7e3dbfec57f91d60b3e2d387a2be579c19bcc",
+      "byteLength": 309792,
+      "recordCount": 5374,
+      "firstDate": "2005-02-25",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "IWM",
+      "sourceTicker": "IWM.US",
+      "path": "seed/iwm.us.txt",
+      "sha256": "16154c7ec92e6abaa65a03fc3a12ff8be911b17022652f2474a4eb7e6e738696",
+      "byteLength": 395461,
+      "recordCount": 5374,
+      "firstDate": "2005-02-25",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "ONEQ",
+      "sourceTicker": "ONEQ.US",
+      "path": "seed/oneq.us.txt",
+      "sha256": "ba50a2e9b1a7308c6ad12c02b9d0992265c81566a0cdaee5a76f34e894874ed5",
+      "byteLength": 395838,
+      "recordCount": 5374,
+      "firstDate": "2005-02-25",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "PSCH",
+      "sourceTicker": "PSCH.US",
+      "path": "seed/psch.us.txt",
+      "sha256": "a52c4e8aa359627915553b312e7eb574ec0b63c6d9c82222b977978985d060b6",
+      "byteLength": 246743,
+      "recordCount": 3846,
+      "firstDate": "2011-03-23",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "SPY",
+      "sourceTicker": "SPY.US",
+      "path": "seed/spy.us.txt",
+      "sha256": "ff2e19186675951d6ac605fcab493d66879053a82955b7d964cd906e625fb0db",
+      "byteLength": 370200,
+      "recordCount": 5374,
+      "firstDate": "2005-02-25",
+      "lastDate": "2026-07-09"
+    },
+    {
+      "symbol": "VTV",
+      "sourceTicker": "VTV.US",
+      "path": "seed/vtv.us.txt",
+      "sha256": "75aa49228e0120f21ecab59681bf3f12ef6b177bff4d3101fd9f83ee02dac89a",
+      "byteLength": 395061,
+      "recordCount": 5374,
+      "firstDate": "2005-02-25",
+      "lastDate": "2026-07-09"
+    }
+  ]
+}

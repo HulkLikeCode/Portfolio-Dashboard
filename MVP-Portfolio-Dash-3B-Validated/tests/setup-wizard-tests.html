@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup Wizard Tests · MVP Portfolio Dashboard</title>
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/layout.css">
+  <link rel="stylesheet" href="../css/themes.css">
+  <link rel="stylesheet" href="../css/setup-wizard.css">
+</head>
+<body>
+  <main class="test-page">
+    <h1>Setup Wizard Tests</h1>
+    <p>This page performs local setup-shell checks only. It must not make Finnhub API calls.</p>
+
+    <section class="panel">
+      <h2>Automated checks</h2>
+      <div id="test-results" aria-live="polite"></div>
+      <button class="button button--secondary" id="reset-state" type="button">Reset setup state</button>
+      <button class="button button--primary" id="open-wizard" type="button">Open setup wizard</button>
+    </section>
+
+    <section class="panel">
+      <h2>Current local state summary</h2>
+      <dl>
+        <dt>Setup status</dt>
+        <dd data-setup-status>Unknown</dd>
+        <dt>Active symbols</dt>
+        <dd data-active-symbols>Unknown</dd>
+        <dt>Projection horizon</dt>
+        <dd data-projection-horizon>Unknown</dd>
+        <dt>Theme</dt>
+        <dd data-theme-label>Unknown</dd>
+      </dl>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      createDefaultSettingsState,
+      getSettingsStorageKey,
+      loadSettingsState,
+      PREDEFINED_FINNHUB_API_KEY,
+      resetFinnhubApiKey,
+      saveSettingsState,
+      resetSettingsStateForTesting
+    } from '../js/settings/settings-state.js';
+    import { initSetupWizard, openSetupWizard } from '../js/ui/setup-wizard.js';
+
+    const results = document.getElementById('test-results');
+    const checks = [];
+
+    function check(name, predicate) {
+      let passed = false;
+      let detail = '';
+      try {
+        passed = Boolean(predicate());
+      } catch (error) {
+        detail = error.message;
+      }
+      checks.push({ name, passed, detail });
+    }
+
+    function renderResults() {
+      results.replaceChildren();
+      const list = document.createElement('ol');
+      checks.forEach((result) => {
+        const item = document.createElement('li');
+        item.textContent = `${result.passed ? 'PASS' : 'FAIL'}: ${result.name}${result.detail ? ` (${result.detail})` : ''}`;
+        item.dataset.status = result.passed ? 'pass' : 'fail';
+        list.append(item);
+      });
+      results.append(list);
+    }
+
+    function renderSummary() {
+      const state = loadSettingsState();
+      document.querySelector('[data-setup-status]').textContent = state.setup.completed ? 'Setup complete' : 'Setup incomplete';
+      document.querySelector('[data-active-symbols]').textContent = state.activeSymbols.join(', ');
+      document.querySelector('[data-projection-horizon]').textContent = `${state.projectionHorizonYears} years`;
+      document.querySelector('[data-theme-label]').textContent = state.theme;
+    }
+
+    const defaultState = createDefaultSettingsState();
+    check('default setup is incomplete', () => defaultState.setup.completed === false);
+    check('default lots contain DCO, VTV, and ONEQ', () => {
+      const tickers = defaultState.lots.map((lot) => lot.ticker).sort().join(',');
+      return tickers === 'DCO,ONEQ,VTV';
+    });
+    check('default benchmarks contain SPY, IWM, AVUV, AVDV, and PSCH', () => {
+      const tickers = defaultState.benchmarks.map((benchmark) => benchmark.ticker).sort().join(',');
+      return tickers === 'AVDV,AVUV,IWM,PSCH,SPY';
+    });
+    check('default projection horizon is within 1 to 10 years', () => {
+      return defaultState.projectionHorizonYears >= 1 && defaultState.projectionHorizonYears <= 10;
+    });
+    check('settings storage key is local-only', () => getSettingsStorageKey() === 'mvpPortfolioDash.settings.v1');
+    check('Version 2.3 predefined key is the editable default', () => {
+      return defaultState.api.apiKey === PREDEFINED_FINNHUB_API_KEY
+        && defaultState.api.hasKey === true
+        && defaultState.api.keySource === 'predefined';
+    });
+    check('API key backup inclusion defaults on', () => defaultState.exportPreferences.includeApiKeyInBackup === true);
+
+    const overrideState = createDefaultSettingsState();
+    overrideState.api.apiKey = 'browser-test-override';
+    overrideState.api.keySource = 'user-override';
+    saveSettingsState(overrideState, { incrementEditCount: false });
+    check('user API-key override survives reload', () => loadSettingsState().api.apiKey === 'browser-test-override');
+
+    saveSettingsState(resetFinnhubApiKey(loadSettingsState()), { incrementEditCount: false });
+    check('API-key reset survives reload', () => {
+      const state = loadSettingsState();
+      return state.api.apiKey === PREDEFINED_FINNHUB_API_KEY && state.api.keySource === 'predefined';
+    });
+
+    resetSettingsStateForTesting();
+
+    renderSummary();
+    initSetupWizard();
+
+    document.querySelector('.setup-footer .button--primary').click();
+    const renderedKeyInput = document.querySelector('.setup-step input[type="text"]');
+    check('wizard renders the active API key in plaintext', () => {
+      return renderedKeyInput && renderedKeyInput.value === PREDEFINED_FINNHUB_API_KEY;
+    });
+    renderedKeyInput.value = 'browser-ui-override';
+    renderedKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+    const resetButton = [...document.querySelectorAll('.setup-step button')]
+      .find((button) => button.textContent === 'Reset to predefined key');
+    resetButton.click();
+    check('wizard reset control restores the predefined key', () => renderedKeyInput.value === PREDEFINED_FINNHUB_API_KEY);
+
+    renderResults();
+
+    document.getElementById('reset-state').addEventListener('click', () => {
+      resetSettingsStateForTesting();
+      renderSummary();
+      openSetupWizard();
+    });
+
+    document.getElementById('open-wizard').addEventListener('click', () => openSetupWizard());
+  </script>
+</body>
+</html>
