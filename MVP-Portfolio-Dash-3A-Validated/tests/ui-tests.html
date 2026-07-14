@@ -3,24 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Phase 3B Portfolio UI Tests</title>
+  <title>Phase 3B and 4A UI Tests</title>
   <link rel="stylesheet" href="../css/base.css">
   <link rel="stylesheet" href="../css/layout.css">
   <link rel="stylesheet" href="../css/themes.css">
   <link rel="stylesheet" href="../css/portfolio-editor.css">
+  <link rel="stylesheet" href="../css/benchmark-manager.css">
 </head>
 <body>
   <main class="test-page">
-    <h1>Phase 3B Portfolio UI Tests</h1>
+    <h1>Phase 3B and 4A UI Tests</h1>
     <section class="panel">
       <h2>Automated checks</h2>
       <ol id="test-results" aria-live="polite"></ol>
     </section>
     <section class="panel"><div data-portfolio-editor></div></section>
+    <section class="panel"><h2>Shared symbols and benchmarks</h2><div data-benchmark-manager></div></section>
   </main>
   <script type="module">
     import { createDefaultSettingsState } from '../js/settings/settings-state.js';
     import { PortfolioEditor } from '../js/ui/portfolio-editor.js';
+    import { BenchmarkEngine } from '../js/benchmarks/benchmark-engine.js';
+    import { BenchmarkManager } from '../js/ui/benchmark-manager.js';
 
     const results = document.getElementById('test-results');
     const checks = [];
@@ -124,6 +128,112 @@
     secondDcoLotDelete.click();
     check('confirming a non-final lot delete persists once', () => saveCount === 5 && state.lots.length === 3);
 
+    let benchmarkState = createDefaultSettingsState();
+    let benchmarkSaveCount = 0;
+    const historicalDataService = {
+      async getDatasetStatus(symbol) {
+        return { symbol, state: symbol === 'MISSING' ? 'missing' : 'current', available: symbol !== 'MISSING' };
+      }
+    };
+    const benchmarkEngine = new BenchmarkEngine({
+      symbolService: {
+        async validateSymbol(symbol) {
+          return {
+            symbol: String(symbol).trim().toUpperCase(),
+            valid: String(symbol).trim().toUpperCase() !== 'INVALID',
+            match: { description: 'Validated symbol' }
+          };
+        }
+      },
+      historicalDataService,
+      idFactory: () => 'benchmark-ui-readded'
+    });
+    const benchmarkManager = new BenchmarkManager(document.querySelector('[data-benchmark-manager]'), {
+      loadState: () => structuredClone(benchmarkState),
+      saveState: (next) => {
+        benchmarkSaveCount += 1;
+        benchmarkState = structuredClone(next);
+        return structuredClone(benchmarkState);
+      },
+      confirm: () => true,
+      engine: benchmarkEngine,
+      services: { historicalDataService }
+    }).mount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    check('benchmark manager renders five seeded editable benchmarks and three holdings', () => {
+      return document.querySelectorAll('[data-benchmark-manager] [data-record-id]').length === 8
+        && document.querySelectorAll('[data-benchmark-manager] [data-record-type="benchmark"]').length === 5;
+    });
+    check('benchmark records request no lot or cost-basis inputs', () => {
+      document.querySelector('[data-benchmark-action="add"]').click();
+      const dialog = document.querySelector('dialog[open]');
+      const valid = dialog && !dialog.querySelector('[name="shares"], [name="purchasePrice"], [name="lots"]');
+      dialog.querySelector('[data-dialog-cancel]').click();
+      return valid;
+    });
+
+    const spyRow = document.querySelector('[data-benchmark-manager] [data-record-type="benchmark"][data-ticker="SPY"]');
+    spyRow.querySelector('[data-record-toggle="includeInCharts"]').click();
+    const spyProjectionRow = document.querySelector('[data-benchmark-manager] [data-record-type="benchmark"][data-ticker="SPY"]');
+    spyProjectionRow.querySelector('[data-record-toggle="includeInProjectionTables"]').click();
+    check('chart and benchmark projection include/exclude controls persist', () => {
+      const spy = benchmarkState.benchmarks.find((item) => item.ticker === 'SPY');
+      return benchmarkSaveCount === 2 && spy.includeInCharts === false && spy.includeInProjectionTables === false;
+    });
+    check('registry edits invalidate charts, analytics, and simulations', () => {
+      return benchmarkState.dependentDataState.charts === 'stale'
+        && benchmarkState.dependentDataState.analytics === 'stale'
+        && benchmarkState.dependentDataState.simulations === 'stale';
+    });
+
+    benchmarkState.holdings.push({ id: 'holding-spy-ui', ticker: 'SPY', label: 'Owned SPY', active: true, type: 'holding', lotIds: [] });
+    benchmarkManager.reload();
+    document.querySelector('[data-benchmark-manager] [data-record-type="benchmark"][data-ticker="SPY"] [data-benchmark-action="delete"]').click();
+    check('deleting a benchmark leaves a same-ticker holding unchanged', () => {
+      return !benchmarkState.benchmarks.some((item) => item.ticker === 'SPY')
+        && benchmarkState.holdings.some((item) => item.id === 'holding-spy-ui' && item.label === 'Owned SPY');
+    });
+
+    document.querySelector('[data-benchmark-manager] [data-benchmark-action="add"]').click();
+    const readdDialog = document.querySelector('dialog[open]');
+    readdDialog.querySelector('[name="ticker"]').value = 'SPY';
+    readdDialog.querySelector('[name="label"]').value = 'Re-added SPY';
+    readdDialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    check('a deleted seeded benchmark can be validated and re-added as an ordinary record', () => {
+      const readded = benchmarkState.benchmarks.find((item) => item.ticker === 'SPY');
+      return readded?.label === 'Re-added SPY' && readded.builtIn === false;
+    });
+
+    const inactive = benchmarkState.benchmarks.find((item) => item.ticker === 'IWM');
+    benchmarkState.benchmarks = benchmarkState.benchmarks.map((item) => item.id === inactive.id ? { ...item, active: false } : item);
+    benchmarkManager.reload();
+    const activityFilter = document.querySelector('[data-symbol-activity]');
+    activityFilter.value = 'inactive';
+    activityFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    const search = document.querySelector('[data-symbol-search]');
+    search.value = 'iwm';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    check('search and activity filters find stored inactive records', () => {
+      const rows = document.querySelectorAll('[data-benchmark-manager] [data-record-id]');
+      return rows.length === 1 && rows[0].dataset.ticker === 'IWM';
+    });
+
+    benchmarkState = {
+      ...benchmarkState,
+      holdings: Array.from({ length: 25 }, (_, index) => ({ id: `cap-holding-${index}`, ticker: `C${index}`, label: `C${index}`, active: true, type: 'holding', lotIds: [] })),
+      benchmarks: [{ id: 'cap-extra', ticker: 'EXTRA', label: 'Extra', active: false, type: 'benchmark' }]
+    };
+    benchmarkManager.query = '';
+    benchmarkManager.activity = 'all';
+    benchmarkManager.reload();
+    document.querySelector('[data-record-id="cap-extra"] [data-record-toggle="active"]').click();
+    check('UI prevents activation of the 26th symbol with a clear warning', () => {
+      return benchmarkState.benchmarks[0].active === false
+        && document.querySelector('[data-benchmark-status]').textContent.includes('25-active-symbol limit');
+    });
+
     checks.forEach(({ name, passed, detail }) => {
       const item = document.createElement('li');
       item.dataset.status = passed ? 'pass' : 'fail';
@@ -131,6 +241,20 @@
       results.append(item);
     });
     document.documentElement.dataset.testsComplete = 'true';
+    if (new URLSearchParams(location.search).has('report')) {
+      const passed = checks.filter((entry) => entry.passed).length;
+      fetch('/__baseline_results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suite: 'phase-3b-4a-ui',
+          passed,
+          failed: checks.length - passed,
+          total: checks.length,
+          failures: checks.filter((entry) => !entry.passed)
+        })
+      }).catch(() => {});
+    }
   </script>
 </body>
 </html>

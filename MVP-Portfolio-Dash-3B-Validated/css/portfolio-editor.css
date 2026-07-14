@@ -1,0 +1,381 @@
+.portfolio-toolbar,
+.holding-card__header,
+.holding-card__actions,
+.lot-actions,
+.portfolio-dialog__header,
+.portfolio-dialog__actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.portfolio-toolbar {
+  margin-bottom: 1rem;
+}
+
+.portfolio-save-status {
+  min-height: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-muted);
+}
+
+.portfolio-save-status[data-error="true"] {
+  color: var(--color-danger-text);
+}
+
+.holding-list {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.holding-card,
+.portfolio-empty,
+.portfolio-notice,
+.portfolio-comparison {
+  border: 1px solid var(--color-border);
+  border-radius: 0.85rem;
+  padding: 1rem;
+  background: var(--color-surface-muted);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.holding-card__header {
+  align-items: center;
+  flex-wrap: nowrap;
+  margin-bottom: 0.75rem;
+}
+
+.holding-card__summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.holding-card__summary h3 {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+.holding-card__header p {
+  min-width: 0;
+  margin-bottom: 0;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.holding-card__actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.holding-card__actions .button {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.button--danger {
+  color: var(--color-danger-text);
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+.button--danger:hover {
+  color: var(--color-button-text);
+  background: var(--color-danger-text);
+}
+
+.button--ghost {
+  color: var(--color-text);
+  background: transparent;
+}
+
+.button--ghost:hover {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.lot-table-scroll,
+.portfolio-comparison__scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lot-table,
+.portfolio-comparison table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.lot-table {
+  table-layout: fixed;
+}
+
+.lot-table th,
+.lot-table td {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lot-table th,
+.lot-table td,
+.portfolio-comparison th,
+.portfolio-comparison td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.lot-note {
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.lot-actions {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.lot-actions .button {
+  min-height: 2.15rem;
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 0.4rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.lot-actions .button:nth-child(2) {
+  flex-grow: 2;
+}
+
+.portfolio-dialog {
+  width: min(94vw, 46rem);
+  max-height: min(90vh, 52rem);
+  overflow: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 1rem;
+  padding: 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg, 0 1rem 3rem rgb(0 0 0 / 0.25));
+}
+
+.portfolio-dialog::backdrop {
+  background: rgb(15 23 42 / 0.72);
+}
+
+.portfolio-form {
+  padding: clamp(1rem, 4vw, 1.5rem);
+}
+
+.portfolio-dialog__header {
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.portfolio-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.portfolio-field {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 700;
+}
+
+.portfolio-field--wide {
+  grid-column: 1 / -1;
+}
+
+.portfolio-field input,
+.portfolio-field textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.65rem;
+  padding: 0.65rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.portfolio-field textarea {
+  resize: vertical;
+}
+
+.portfolio-field small {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.portfolio-check {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  min-height: 2.75rem;
+  align-self: end;
+}
+
+.portfolio-check input {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.portfolio-form__errors {
+  margin-bottom: 1rem;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+}
+
+.portfolio-form__errors p {
+  margin-bottom: 0.25rem;
+  font-weight: 700;
+}
+
+.portfolio-form__errors ul {
+  margin-bottom: 0;
+  padding-left: 1.25rem;
+}
+
+.portfolio-notice {
+  margin-bottom: 1rem;
+}
+
+.portfolio-notice--warning {
+  color: var(--color-warning-text);
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+}
+
+.portfolio-comparison {
+  margin-top: 1rem;
+}
+
+.portfolio-dialog__actions {
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 44.01rem) {
+  .lot-table th:nth-child(1),
+  .lot-table td:nth-child(1) {
+    width: 5.5rem;
+  }
+
+  .lot-table th:nth-child(2),
+  .lot-table td:nth-child(2) {
+    width: 5rem;
+  }
+
+  .lot-table th:nth-child(3),
+  .lot-table td:nth-child(3) {
+    width: 6.5rem;
+  }
+
+  .lot-table th:nth-child(4),
+  .lot-table td:nth-child(4) {
+    width: 7rem;
+  }
+
+  .lot-table th:last-child,
+  .lot-table td:last-child {
+    width: 17rem;
+  }
+}
+
+@media (max-width: 44rem) {
+  .lot-actions,
+  .portfolio-dialog__actions {
+    width: 100%;
+  }
+
+  .portfolio-dialog__actions .button {
+    flex: 1 1 8rem;
+  }
+
+  .portfolio-form__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-field--wide {
+    grid-column: auto;
+  }
+
+  .lot-table,
+  .lot-table tbody,
+  .lot-table tr,
+  .lot-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .lot-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .lot-table tr {
+    border-top: 1px solid var(--color-border-strong);
+    padding: 0.5rem 0;
+  }
+
+  .lot-table td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 35%) minmax(0, 1fr);
+    gap: 0.5rem;
+    border: 0;
+    padding: 0.4rem 0;
+  }
+
+  .lot-table td::before {
+    content: attr(data-label);
+    color: var(--color-text-muted);
+    font-weight: 700;
+  }
+
+  .lot-table td[data-label="Actions"] {
+    grid-template-columns: 1fr;
+  }
+
+  .lot-actions {
+    min-width: 0;
+  }
+
+  .portfolio-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100dvh;
+    margin: auto 0 0;
+    border-radius: 1rem 1rem 0 0;
+  }
+}

@@ -1,0 +1,80 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-page-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+  --color-nav-bg: rgba(255, 255, 255, 0.92);
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  --color-heading: #020617;
+  --color-border: #e2e8f0;
+  --color-border-strong: #94a3b8;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-button-text: #ffffff;
+  --color-link: #1d4ed8;
+  --color-link-hover: #1e40af;
+  --color-focus: #f59e0b;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #f59e0b;
+  --color-warning-text: #78350f;
+  --color-danger-bg: #fee2e2;
+  --color-danger-border: #ef4444;
+  --color-danger-text: #7f1d1d;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page-bg: #020617;
+  --color-surface: #0f172a;
+  --color-surface-muted: #1e293b;
+  --color-nav-bg: rgba(15, 23, 42, 0.92);
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-heading: #f8fafc;
+  --color-border: #334155;
+  --color-border-strong: #64748b;
+  --color-accent: #60a5fa;
+  --color-accent-hover: #3b82f6;
+  --color-button-text: #020617;
+  --color-link: #93c5fd;
+  --color-link-hover: #bfdbfe;
+  --color-focus: #fbbf24;
+  --color-warning-bg: #422006;
+  --color-warning-border: #d97706;
+  --color-warning-text: #fde68a;
+  --color-danger-bg: #450a0a;
+  --color-danger-border: #dc2626;
+  --color-danger-text: #fecaca;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-page-bg: #020617;
+    --color-surface: #0f172a;
+    --color-surface-muted: #1e293b;
+    --color-nav-bg: rgba(15, 23, 42, 0.92);
+    --color-text: #e2e8f0;
+    --color-text-muted: #94a3b8;
+    --color-heading: #f8fafc;
+    --color-border: #334155;
+    --color-border-strong: #64748b;
+    --color-accent: #60a5fa;
+    --color-accent-hover: #3b82f6;
+    --color-button-text: #020617;
+    --color-link: #93c5fd;
+    --color-link-hover: #bfdbfe;
+    --color-focus: #fbbf24;
+    --color-warning-bg: #422006;
+    --color-warning-border: #d97706;
+    --color-warning-text: #fde68a;
+    --color-danger-bg: #450a0a;
+    --color-danger-border: #dc2626;
+    --color-danger-text: #fecaca;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}

@@ -5,8 +5,9 @@ import {
 } from './settings/settings-state.js';
 import { initSetupWizard, openSetupWizard } from './ui/setup-wizard.js';
 import { initPortfolioPhase3B } from './ui/portfolio-phase-3b.js?v=0.2.3-phase-3b-2';
+import { initBenchmarkManagement } from './ui/benchmark-manager.js?v=0.2.3-phase-4a-3';
 
-const APP_VERSION = '0.2.3-v2.3-phase-3b';
+const APP_VERSION = '0.2.3-v2.3-phase-4a';
 
 document.addEventListener('DOMContentLoaded', () => {
   bootstrapApp();
@@ -19,6 +20,7 @@ function bootstrapApp() {
   renderPhaseOneShellState(state);
   wireShellActions();
   initPortfolioPhase3B();
+  initBenchmarkManagement();
   renderDependentDataState(state);
   registerServiceWorker();
   initSetupWizard();
@@ -72,6 +74,9 @@ function wireShellActions() {
   });
 
   window.addEventListener('mvp:portfolio-changed', (event) => {
+    renderDependentDataState({ dependentDataState: event.detail?.dependentDataState });
+  });
+  window.addEventListener('mvp:symbol-registry-changed', (event) => {
     renderDependentDataState({ dependentDataState: event.detail?.dependentDataState });
   });
 }

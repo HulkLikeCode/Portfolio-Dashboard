@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 3B Portfolio UI Tests</title>
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/layout.css">
+  <link rel="stylesheet" href="../css/themes.css">
+  <link rel="stylesheet" href="../css/portfolio-editor.css">
+</head>
+<body>
+  <main class="test-page">
+    <h1>Phase 3B Portfolio UI Tests</h1>
+    <section class="panel">
+      <h2>Automated checks</h2>
+      <ol id="test-results" aria-live="polite"></ol>
+    </section>
+    <section class="panel"><div data-portfolio-editor></div></section>
+  </main>
+  <script type="module">
+    import { createDefaultSettingsState } from '../js/settings/settings-state.js';
+    import { PortfolioEditor } from '../js/ui/portfolio-editor.js';
+
+    const results = document.getElementById('test-results');
+    const checks = [];
+    let state = createDefaultSettingsState();
+    let saveCount = 0;
+    let confirmResult = true;
+    const editor = new PortfolioEditor(document.querySelector('[data-portfolio-editor]'), {
+      loadState: () => structuredClone(state),
+      saveState: (next) => { saveCount += 1; state = structuredClone(next); return structuredClone(state); },
+      confirm: () => confirmResult
+    }).mount();
+
+    function check(name, predicate) {
+      let passed = false;
+      let detail = '';
+      try { passed = Boolean(predicate()); } catch (error) { detail = error.message; }
+      checks.push({ name, passed, detail });
+    }
+
+    check('renders three editable default holdings', () => document.querySelectorAll('.holding-card').length === 3);
+    check('uses engine summary for exact default cost basis', () => document.querySelector('.portfolio-toolbar').textContent.includes('$214,442.70'));
+    check('renders add, edit, delete, and manual-adjustment actions', () => {
+      return ['add-holding', 'add-lot', 'edit-lot', 'delete-lot', 'delete-holding', 'manual-adjustment']
+        .every((action) => document.querySelector(`[data-portfolio-action="${action}"]`));
+    });
+
+    const manualButton = document.querySelector('[data-portfolio-action="manual-adjustment"]');
+    manualButton.click();
+    const manualDialog = document.querySelector('dialog[open]');
+    check('manual workflow states that corporate actions are never automatic', () => manualDialog.textContent.includes('does not detect or apply splits'));
+    check('manual workflow displays before-and-after values', () => manualDialog.querySelector('[data-after="shares"]'));
+    manualDialog.querySelector('[name="shares"]').value = '78';
+    manualDialog.querySelector('[name="auditNote"]').value = '';
+    manualDialog.querySelector('[name="shares"]').dispatchEvent(new Event('input', { bubbles: true }));
+    check('before-and-after preview updates without persistence', () => manualDialog.querySelector('[data-after="shares"]').textContent === '78' && saveCount === 0);
+
+    manualDialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    check('missing manual audit note is announced and focused', () => {
+      return manualDialog.querySelector('[role="alert"]').textContent.includes('audit note')
+        && document.activeElement === manualDialog.querySelector('[name="auditNote"]');
+    });
+    manualDialog.querySelector('[data-dialog-cancel]').click();
+
+    const editButton = document.querySelector('[data-portfolio-action="edit-lot"]');
+    editButton.click();
+    const editDialog = document.querySelector('dialog[open]');
+    editDialog.querySelector('[name="shares"]').value = '0';
+    editDialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    check('engine validation preserves input and focuses invalid field', () => {
+      const shares = editDialog.querySelector('[name="shares"]');
+      return shares.value === '0' && shares.getAttribute('aria-invalid') === 'true' && document.activeElement === shares && saveCount === 0;
+    });
+    editDialog.querySelector('[data-dialog-cancel]').click();
+
+    const addLotButton = document.querySelector('[data-portfolio-action="add-lot"]');
+    addLotButton.click();
+    const addDialog = document.querySelector('dialog[open]');
+    addDialog.querySelector('[name="shares"]').value = '0.5';
+    addDialog.querySelector('[name="purchasePricePerShare"]').value = '100';
+    addDialog.querySelector('[name="acquisitionDate"]').value = '2026-06-01';
+    addDialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    check('explicit submit persists one new lot exactly once', () => saveCount === 1 && state.lots.length === 4);
+    check('saved portfolio edit marks analytics and simulations stale', () => state.dependentDataState.analytics === 'stale' && state.dependentDataState.simulations === 'stale');
+
+    document.querySelector('[data-portfolio-action="add-holding"]').click();
+    const addHoldingDialog = document.querySelector('dialog[open]');
+    addHoldingDialog.querySelector('[name="ticker"]').value = 'XYZ';
+    addHoldingDialog.querySelector('[name="shares"]').value = '2';
+    addHoldingDialog.querySelector('[name="purchasePricePerShare"]').value = '25';
+    addHoldingDialog.querySelector('[name="acquisitionDate"]').value = '2026-06-02';
+    addHoldingDialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    check('holding form adds one holding with its first lot', () => saveCount === 2 && state.holdings.some((holding) => holding.ticker === 'XYZ'));
+
+    const xyzCard = [...document.querySelectorAll('[data-holding-id]')].find((card) => card.querySelector('h3').textContent === 'XYZ');
+    xyzCard.querySelector('[data-portfolio-action="edit-holding"]').click();
+    const editHoldingDialog = document.querySelector('dialog[open]');
+    editHoldingDialog.querySelector('[name="ticker"]').value = 'XYZ2';
+    editHoldingDialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    check('holding form edits ticker through the engine and updates its lot', () => {
+      const holding = state.holdings.find((entry) => entry.ticker === 'XYZ2');
+      const lot = state.lots.find((entry) => entry.holdingId === holding?.id);
+      return saveCount === 3 && lot?.ticker === 'XYZ2';
+    });
+
+    confirmResult = false;
+    const xyz2Delete = [...document.querySelectorAll('[data-holding-id]')]
+      .find((card) => card.querySelector('h3').textContent === 'XYZ2')
+      .querySelector('[data-portfolio-action="delete-holding"]');
+    xyz2Delete.click();
+    check('canceling a holding delete performs no write', () => saveCount === 3 && state.holdings.some((holding) => holding.ticker === 'XYZ2'));
+    confirmResult = true;
+    xyz2Delete.click();
+    check('confirming a holding delete removes its lots', () => saveCount === 4 && !state.holdings.some((holding) => holding.ticker === 'XYZ2') && !state.lots.some((lot) => lot.ticker === 'XYZ2'));
+
+    const secondDcoLotDelete = document.querySelectorAll('[data-holding-id]')[0]
+      .querySelectorAll('[data-portfolio-action="delete-lot"]')[1];
+    confirmResult = false;
+    secondDcoLotDelete.click();
+    check('canceling a lot delete performs no write', () => saveCount === 4 && state.lots.length === 4);
+    confirmResult = true;
+    secondDcoLotDelete.click();
+    check('confirming a non-final lot delete persists once', () => saveCount === 5 && state.lots.length === 3);
+
+    checks.forEach(({ name, passed, detail }) => {
+      const item = document.createElement('li');
+      item.dataset.status = passed ? 'pass' : 'fail';
+      item.textContent = `${passed ? 'PASS' : 'FAIL'}: ${name}${detail ? ` (${detail})` : ''}`;
+      results.append(item);
+    });
+    document.documentElement.dataset.testsComplete = 'true';
+  </script>
+</body>
+</html>
