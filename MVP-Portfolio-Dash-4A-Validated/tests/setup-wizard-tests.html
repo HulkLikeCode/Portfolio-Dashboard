@@ -126,6 +126,8 @@
     const legacyState = createDefaultSettingsState();
     legacyState.api.apiKey = 'legacy-browser-key-to-scrub';
     legacyState.api.keySource = 'user-override';
+    // Deliberately writes a legacy fixture so loadSettingsState can prove it is scrubbed.
+    // codeql[js/clear-text-storage-of-sensitive-data]
     window.localStorage.setItem(getSettingsStorageKey(), JSON.stringify(legacyState));
     check('legacy clear-text API key remains available for the current session', () => {
       return loadSettingsState().api.apiKey === 'legacy-browser-key-to-scrub';

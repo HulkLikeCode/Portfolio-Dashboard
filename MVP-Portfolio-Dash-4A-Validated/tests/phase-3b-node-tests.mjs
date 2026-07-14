@@ -51,7 +51,10 @@ assert(portfolio.holdings[0].lots.every((lot) => lot.ticker === 'AAC'), 'ticker 
 const summary = summarizePortfolio(portfolio, options);
 assert.equal(summary.holdingCount, 2);
 assert.equal(summary.lotCount, 3);
-assert.equal(summary.costBasis, 53, 'cost basis comes from Phase 3A engine calculations');
+assert.equal(summary.costBasis, 30, 'default cost basis includes active holdings only');
+
+const allHoldingsSummary = summarizePortfolio(portfolio, { ...options, activeOnly: false });
+assert.equal(allHoldingsSummary.costBasis, 53, 'all-holdings cost basis comes from Phase 3A engine calculations');
 
 portfolio = deleteLotCandidate(portfolio, 'holding-aaa', newLotId, options);
 assert.equal(portfolio.holdings[0].lots.length, 1);

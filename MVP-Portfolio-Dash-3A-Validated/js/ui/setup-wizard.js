@@ -161,14 +161,14 @@ class SetupWizard {
       children: [
         createElement('p', {
           className: 'setup-lead',
-          text: 'This app is client-side only. Configuration, portfolio lots, benchmarks, preferences, and the active Finnhub API key are stored in this browser profile.'
+          text: 'This app is client-side only. Configuration, portfolio lots, benchmarks, and preferences are stored in this browser profile. User-entered Finnhub API keys are kept only in memory for the current page session.'
         }),
         createElement('div', {
           className: 'setup-warning-grid',
           children: [
             warningCard(
               'API key storage',
-              'Version 2.3 includes a predefined editable Finnhub key. The active key is stored locally and may be included in diagnostics, exports, and backups. Infrastructure credentials remain excluded.'
+              'The predefined project key remains available after reload. A replacement key is held only in memory, is excluded from browser storage and backups, and must be re-entered after a full page reload.'
             ),
             warningCard(
               'Local data loss risk',
@@ -186,7 +186,7 @@ class SetupWizard {
 
   renderApiKeyStep() {
     const keyInput = createElement('input', {
-      type: 'text',
+      type: 'password',
       value: this.state.api.apiKey || '',
       placeholder: PREDEFINED_FINNHUB_API_KEY,
       attributes: {
@@ -227,12 +227,12 @@ class SetupWizard {
         createField({
           label: 'Finnhub API key',
           input: keyInput,
-          hint: 'The active key applies to subsequent Finnhub requests without rebuilding the app.'
+          hint: 'The active key applies to subsequent Finnhub requests for this page session without rebuilding the app.'
         }),
         resetButton,
         createElement('p', {
           className: 'setup-muted',
-          text: 'Version 2.3 displays the active key in plaintext and permits it in private-repository diagnostics, exports, and backups.'
+          text: 'The active key is masked, held only for this page session, and excluded from diagnostics, exports, backups, and browser storage.'
         })
       ]
     });
@@ -521,7 +521,7 @@ class SetupWizard {
     const list = createElement('dl', {
       className: 'setup-review-list',
       children: [
-        term('API key status', this.state.api.apiKey ? 'Stored locally' : 'Not entered'),
+        term('API key status', this.state.api.apiKey ? 'Available for this session' : 'Not entered'),
         term('Holdings', String(holdingsCount)),
         term('Lots', String(lotsCount)),
         term('Benchmarks', String(benchmarksCount)),

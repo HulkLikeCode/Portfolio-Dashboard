@@ -42,4 +42,4 @@ No production Finnhub or Treasury request was made by these automated harnesses.
 - Headless Firefox does not replace interactive keyboard, focus-restoration, screen-reader, touch-target, orientation, or on-screen-keyboard testing.
 - A physical iPhone 13 mini/iOS 26.5 run was not recorded for this phase.
 - The deterministic re-add test restores a just-deleted stored benchmark without a new provider request. Fresh, previously unknown benchmark symbols are validated through the Symbol Service; no live provider validation was independently exercised in this session.
-- Supplemental Node suites, including `security-storage-tests.mjs`, were not run because a `node` executable is not installed in this environment. The corresponding browser security checks passed as recorded above.
+- Supplemental Node suites were not available during the original acceptance session. They were later executed successfully with Node.js 22.23.1; see `supplemental-node-acceptance-2026-07-14.md`.

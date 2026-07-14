@@ -303,7 +303,9 @@
       });
       const snapshot = await diagnostics.getSnapshot();
       equal(JSON.stringify(snapshot).includes("super-secret"), false);
-      equal(snapshot.security.apiKeyExposed, true);
+      equal(snapshot.security.apiKeyExposed, false);
+      equal(snapshot.security.apiKeyLogged, false);
+      equal(Object.hasOwn(snapshot, "activeApiKey"), false);
     });
 
     test("All eight permitted routes are represented and no historical route is present", () => {

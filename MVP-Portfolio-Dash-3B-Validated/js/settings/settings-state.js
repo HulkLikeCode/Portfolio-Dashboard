@@ -347,6 +347,8 @@ function persistSettingsState(state) {
     ...persistentSettings,
     api: persistentApiMetadata
   };
+  // The payload is structurally built without api.apiKey above.
+  // codeql[js/clear-text-storage-of-sensitive-data]
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistentState));
 }
 
