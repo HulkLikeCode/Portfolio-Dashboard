@@ -7,6 +7,7 @@ import { assertActiveSymbolLimit } from '../core/symbol-registry.js';
 const STORAGE_KEY = 'mvpPortfolioDash.settings.v1';
 const APP_VERSION = '0.2.3-v2.3-phase-4a';
 const SETTINGS_SCHEMA_VERSION = 2;
+let runtimeFinnhubApiKey = PREDEFINED_FINNHUB_API_KEY;
 
 const DEFAULT_LOTS = [
   {
@@ -49,7 +50,7 @@ const DEFAULT_MONTE_CARLO_SETTINGS = Object.freeze({
 });
 
 const DEFAULT_EXPORT_PREFERENCES = Object.freeze({
-  includeApiKeyInBackup: true,
+  includeApiKeyInBackup: false,
   backupReminderEnabled: true,
   backupReminderDays: 30,
   backupReminderEditCount: 10
@@ -148,13 +149,23 @@ export function loadSettingsState() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return createDefaultSettingsState();
+      return applyRuntimeApiKey(createDefaultSettingsState());
     }
 
     const parsed = JSON.parse(raw);
-    return normalizeSettingsState(migrateSettingsState(parsed));
+    const legacyApiKey = parsed?.api?.apiKey;
+    if (typeof legacyApiKey === 'string' && legacyApiKey.trim()) {
+      runtimeFinnhubApiKey = legacyApiKey.trim();
+    }
+
+    const normalized = applyRuntimeApiKey(normalizeSettingsState(migrateSettingsState(parsed)));
+
+    // Rewrite legacy state immediately so keys saved by older versions do not
+    // remain in clear text after the application is upgraded.
+    persistSettingsState(normalized);
+    return normalized;
   } catch (error) {
-    return createDefaultSettingsState();
+    return applyRuntimeApiKey(createDefaultSettingsState());
   }
 }
 
@@ -167,7 +178,8 @@ export function saveSettingsState(nextState, options = {}) {
     normalized.backup.editsSinceLastBackup += 1;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  runtimeFinnhubApiKey = normalized.api.apiKey;
+  persistSettingsState(normalized);
   return normalized;
 }
 
@@ -182,6 +194,7 @@ export function markSetupComplete(state) {
 
 export function resetSettingsStateForTesting() {
   window.localStorage.removeItem(STORAGE_KEY);
+  runtimeFinnhubApiKey = PREDEFINED_FINNHUB_API_KEY;
   return createDefaultSettingsState();
 }
 
@@ -322,6 +335,26 @@ function normalizeSettingsState(state) {
   }
 
   return next;
+}
+
+function applyRuntimeApiKey(state) {
+  const next = state;
+  next.api.apiKey = runtimeFinnhubApiKey || PREDEFINED_FINNHUB_API_KEY;
+  next.api.hasKey = Boolean(next.api.apiKey);
+  next.api.keySource = next.api.apiKey === PREDEFINED_FINNHUB_API_KEY
+    ? FINNHUB_API_KEY_SOURCES.PREDEFINED
+    : FINNHUB_API_KEY_SOURCES.USER_OVERRIDE;
+  return next;
+}
+
+function persistSettingsState(state) {
+  const { api: runtimeApi, ...persistentSettings } = state;
+  const { apiKey: _omittedApiKey, ...persistentApiMetadata } = runtimeApi;
+  const persistentState = {
+    ...persistentSettings,
+    api: persistentApiMetadata
+  };
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistentState));
 }
 
 function normalizeHolding(holding) {

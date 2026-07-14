@@ -525,6 +525,35 @@ buildHistoricalAccountValueSeries(portfolio, historicalService, options)
 
 Must preserve separate holding and benchmark records even when they share a ticker. It owns active-state enforcement and the 25-symbol cap, but not quote retrieval or analytics calculations.
 
+Stable public registry getters:
+
+```text
+records()
+activeSymbols()
+activeCount()
+find(recordType, id)
+filter(query, activity)
+canActivate(recordType, id)
+```
+
+Stable public benchmark selectors:
+
+```text
+activeBenchmarks(state)
+chartBenchmarks(state)
+projectionTableBenchmarks(state)
+```
+
+Successful persisted benchmark or shared active-state edits publish the
+`SYMBOL_REGISTRY_CHANGED_EVENT` (`mvp:symbol-registry-changed`) `CustomEvent`
+on `window`, with `registryRevision` and `dependentDataState` in `detail`.
+Holding and lot saves publish `mvp:portfolio-changed`. Later consumers reload
+saved state after either notification; event payloads are invalidation notices,
+not authoritative state snapshots. The complete return semantics, identity and
+de-duplication rules, payload shape, and non-emitting operations are documented
+in `README.md` under **Stable integration contracts / Symbol registry and
+benchmarks**.
+
 ## 6.7 Analytics Engine
 
 Stable public calculations must include:
@@ -2397,7 +2426,10 @@ After merge, use a new repair branch and `git revert <merge-commit>`; do not res
 
 ## Phase notes
 
-Phase 5A may begin only after stable symbol-registry events and getters are documented.
+The stable symbol-registry events and getters required by Phase 5A are
+documented in Section 6.6 and `README.md` under **Stable integration contracts /
+Symbol registry and benchmarks**. Phase 5A remains gated on Phase 4A acceptance
+and the other repository acceptance requirements above.
 
 
 # Phase 5A - Chart Manager

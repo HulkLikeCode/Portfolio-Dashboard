@@ -84,8 +84,7 @@ export const INDEXED_DB_STORE_DEFINITIONS = Object.freeze([
 export function createDefaultApiSettingsMetadata() {
   return {
     provider: "finnhub",
-    apiKey: PREDEFINED_FINNHUB_API_KEY,
-    hasApiKey: true,
+    hasApiKey: Boolean(PREDEFINED_FINNHUB_API_KEY),
     keySource: FINNHUB_API_KEY_SOURCES.PREDEFINED,
     apiKeyLastUpdatedAt: null,
     lastCapabilityCheckAt: null
@@ -108,7 +107,7 @@ export function createDefaultLocalState() {
     uiPreferences: {},
     projectionHorizonYears: 5,
     monteCarloSettings: {},
-    exportPreferences: { includeApiKeyInBackup: true },
+    exportPreferences: { includeApiKeyInBackup: false },
     historicalImportPreferences: {},
     setup: {
       completed: false,
@@ -123,19 +122,15 @@ export function sanitizeApiSettings(apiSettings = {}) {
     : {};
   delete safe.token;
   delete safe.secret;
+  delete safe.apiKey;
   const normalized = {
     ...createDefaultApiSettingsMetadata(),
-    ...safe,
-    apiKey: typeof safe.apiKey === "string" && safe.apiKey.trim()
-      ? safe.apiKey.trim()
-      : PREDEFINED_FINNHUB_API_KEY
+    ...safe
   };
-  normalized.hasApiKey = Boolean(normalized.apiKey);
+  normalized.hasApiKey = Boolean(normalized.hasApiKey);
   normalized.keySource = Object.values(FINNHUB_API_KEY_SOURCES).includes(normalized.keySource)
     ? normalized.keySource
-    : normalized.apiKey === PREDEFINED_FINNHUB_API_KEY
-      ? FINNHUB_API_KEY_SOURCES.PREDEFINED
-      : FINNHUB_API_KEY_SOURCES.USER_OVERRIDE;
+    : FINNHUB_API_KEY_SOURCES.PREDEFINED;
   return normalized;
 }
 
@@ -143,7 +138,6 @@ export function summarizeApiSettingsForDiagnostics(apiSettings = {}) {
   const normalized = sanitizeApiSettings(apiSettings);
   return {
     provider: normalized.provider,
-    apiKey: normalized.apiKey,
     hasApiKey: normalized.hasApiKey,
     keySource: normalized.keySource,
     apiKeyLastUpdatedAt: normalized.apiKeyLastUpdatedAt,

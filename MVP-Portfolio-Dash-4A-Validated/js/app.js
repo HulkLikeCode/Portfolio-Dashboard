@@ -3,6 +3,7 @@ import {
   loadSettingsState,
   saveSettingsState
 } from './settings/settings-state.js';
+import { SYMBOL_REGISTRY_CHANGED_EVENT } from './core/symbol-registry.js';
 import { initSetupWizard, openSetupWizard } from './ui/setup-wizard.js';
 import { initPortfolioPhase3B } from './ui/portfolio-phase-3b.js?v=0.2.3-phase-3b-2';
 import { initBenchmarkManagement } from './ui/benchmark-manager.js?v=0.2.3-phase-4a-3';
@@ -76,7 +77,7 @@ function wireShellActions() {
   window.addEventListener('mvp:portfolio-changed', (event) => {
     renderDependentDataState({ dependentDataState: event.detail?.dependentDataState });
   });
-  window.addEventListener('mvp:symbol-registry-changed', (event) => {
+  window.addEventListener(SYMBOL_REGISTRY_CHANGED_EVENT, (event) => {
     renderDependentDataState({ dependentDataState: event.detail?.dependentDataState });
   });
 }

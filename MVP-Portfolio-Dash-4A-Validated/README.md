@@ -25,10 +25,9 @@ historical-data pipeline, live-data services, and Phase 3A portfolio engine.
 Phase 3A is the accepted baseline described by the roadmap.
 
 The Version 2.3 predefined/editable Finnhub-key migration is implemented in
-this baseline: the key is centralized, plaintext and editable in setup,
-resettable, persisted, used by Finnhub clients by default, and available to
-diagnostics and future backup/export consumers. Phase 3B is the next roadmap
-phase; its UI files and tests are not present in this baseline.
+this baseline. Following the clear-text-storage security remediation, a
+user-entered replacement is kept only in page-session memory and is removed
+from legacy Local Storage state. It is excluded from backups by default.
 
 ## Approved architecture
 
@@ -46,11 +45,11 @@ phase; its UI files and tests are not present in this baseline.
 
 ## Version 2.3 key policy
 
-Version 2.3 defines a project-provided Finnhub key that is visible, editable,
-resettable, locally persisted, and included in applicable diagnostics, exports,
-and backups. The exact default and the authorized handling rules are maintained
-in Sections 6 and 7 of `requirements.md`; they should not be duplicated across
-supporting documents.
+Version 2.3 defines a project-provided Finnhub key that is editable and
+resettable. User-entered replacements are deliberately not persisted: they are
+held only in memory for the current page session and excluded from Local
+Storage, diagnostics metadata, exports, and backups. This security policy
+supersedes older roadmap text that calls for clear-text persistence.
 
 This owner-approved policy permits that Finnhub key in the private repository.
 It does not permit GitHub tokens, SSH private keys, local HTTPS private keys, or
@@ -100,6 +99,64 @@ The engine depends on `HistoricalDataService.getAlignedSeries()` and accepts
 raw numeric quotes, Finnhub quote snapshots, or normalized live-data results.
 It does not own persistence, UI rendering, benchmarks, charts, analytics, or
 Monte Carlo behavior.
+
+### Symbol registry and benchmarks
+
+`SymbolRegistry` is an immutable view over the saved `holdings` and
+`benchmarks` collections. The following read methods are the stable Phase 4A
+contract for Phase 5A and later consumers:
+
+- `records()` returns new, top-level-frozen record snapshots, with holdings
+  followed by benchmarks. Consumers must identify a record by both
+  `recordType` (`holding` or `benchmark`) and `id`; ticker alone is not a record
+  identity because a holding and benchmark may share it.
+- `activeSymbols()` returns canonical, de-duplicated, sorted ticker strings for
+  active records. A same-ticker holding and benchmark consume one provider
+  symbol slot. `activeCount()` is the length of this unique set.
+- `find(recordType, id)` returns the matching record snapshot or `null`.
+- `filter(query, activity)` returns record snapshots matching a
+  case-insensitive ticker, label, or record-type query and an `all`, `active`,
+  or `inactive` activity filter.
+- `canActivate(recordType, id)` returns `{ allowed, reason, activeCount }`
+  without changing state. Its stable reasons are `not-found`,
+  `already-counted`, `capacity-available`, and `active-symbol-limit`.
+
+Registry mutation methods return a new `SymbolRegistry`; they do not mutate the
+input state and do not publish browser events. After a successful mutation,
+the owner calls `toState(previousState, options)` once and persists that state.
+`toState()` increments `registryRevision`, recomputes `activeSymbols`, and marks
+charts, analytics, and simulations stale with reason
+`symbol-registry-changed`.
+
+`BenchmarkEngine.activeBenchmarks(state)`, `chartBenchmarks(state)`, and
+`projectionTableBenchmarks(state)` are the stable benchmark selectors. They
+return normalized benchmark records and apply active, chart-inclusion, and
+projection-table-inclusion flags respectively. They perform no data fetches.
+
+After `BenchmarkManager` successfully persists a registry edit, it dispatches
+the exported `SYMBOL_REGISTRY_CHANGED_EVENT` (`mvp:symbol-registry-changed`) as
+a `CustomEvent` on `window`. The notification payload is:
+
+```js
+{
+  registryRevision: Number,
+  dependentDataState: {
+    charts: "stale",
+    analytics: "stale",
+    simulations: "stale",
+    staleReason: "symbol-registry-changed",
+    registryRevision: Number,
+    invalidatedAt: String
+  }
+}
+```
+
+The event is a post-save invalidation notification, not a state snapshot.
+Consumers reload saved settings and use the getters above. Canceled or failed
+edits, search/filter changes, and history-status reads do not publish it.
+Holding and lot saves separately publish `mvp:portfolio-changed`; chart
+consumers that depend on both portfolio composition and benchmark selection
+must subscribe to both events.
 
 ## Development workflow
 

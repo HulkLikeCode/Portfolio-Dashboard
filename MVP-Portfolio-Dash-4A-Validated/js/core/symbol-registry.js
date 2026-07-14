@@ -1,6 +1,7 @@
 import { normalizeSymbol } from "../data/finnhub-client.js";
 
 export const SYMBOL_REGISTRY_VERSION = "2.3-phase-4a";
+export const SYMBOL_REGISTRY_CHANGED_EVENT = "mvp:symbol-registry-changed";
 export const MAX_ACTIVE_SYMBOLS = 25;
 export const REGISTRY_STALE_REASON = "symbol-registry-changed";
 

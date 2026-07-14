@@ -24,6 +24,7 @@
     import { createDefaultSettingsState } from '../js/settings/settings-state.js';
     import { PortfolioEditor } from '../js/ui/portfolio-editor.js';
     import { BenchmarkEngine } from '../js/benchmarks/benchmark-engine.js';
+    import { SYMBOL_REGISTRY_CHANGED_EVENT } from '../js/core/symbol-registry.js';
     import { BenchmarkManager } from '../js/ui/benchmark-manager.js';
 
     const results = document.getElementById('test-results');
@@ -160,6 +161,10 @@
       services: { historicalDataService }
     }).mount();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    const registryEvents = [];
+    window.addEventListener(SYMBOL_REGISTRY_CHANGED_EVENT, (event) => {
+      registryEvents.push(structuredClone(event.detail));
+    });
 
     check('benchmark manager renders five seeded editable benchmarks and three holdings', () => {
       return document.querySelectorAll('[data-benchmark-manager] [data-record-id]').length === 8
@@ -185,6 +190,12 @@
       return benchmarkState.dependentDataState.charts === 'stale'
         && benchmarkState.dependentDataState.analytics === 'stale'
         && benchmarkState.dependentDataState.simulations === 'stale';
+    });
+    check('saved registry edits publish the stable revision and invalidation event', () => {
+      const latest = registryEvents.at(-1);
+      return registryEvents.length === 2
+        && latest.registryRevision === benchmarkState.registryRevision
+        && latest.dependentDataState.staleReason === 'symbol-registry-changed';
     });
 
     benchmarkState.holdings.push({ id: 'holding-spy-ui', ticker: 'SPY', label: 'Owned SPY', active: true, type: 'holding', lotIds: [] });

@@ -46,6 +46,7 @@
       saveSettingsState,
       resetSettingsStateForTesting
     } from '../js/settings/settings-state.js';
+    import { LiveDataDiagnostics } from '../js/diagnostics/live-data-diagnostics.js';
     import { initSetupWizard, openSetupWizard } from '../js/ui/setup-wizard.js';
 
     const results = document.getElementById('test-results');
@@ -101,16 +102,41 @@
         && defaultState.api.hasKey === true
         && defaultState.api.keySource === 'predefined';
     });
-    check('API key backup inclusion defaults on', () => defaultState.exportPreferences.includeApiKeyInBackup === true);
+    check('API key backup inclusion defaults off', () => defaultState.exportPreferences.includeApiKeyInBackup === false);
+
+    const diagnosticSnapshot = await new LiveDataDiagnostics({
+      requestQueue: { getBudgetStatus: () => ({ available: true }) }
+    }).getSnapshot();
+    check('diagnostics exclude the active API key', () => {
+      return diagnosticSnapshot.security.apiKeyExposed === false
+        && diagnosticSnapshot.security.apiKeyLogged === false
+        && !Object.hasOwn(diagnosticSnapshot, 'activeApiKey');
+    });
 
     const overrideState = createDefaultSettingsState();
     overrideState.api.apiKey = 'browser-test-override';
     overrideState.api.keySource = 'user-override';
     saveSettingsState(overrideState, { incrementEditCount: false });
-    check('user API-key override survives reload', () => loadSettingsState().api.apiKey === 'browser-test-override');
+    check('user API-key override remains available in the page session', () => loadSettingsState().api.apiKey === 'browser-test-override');
+    check('user API-key override is excluded from Local Storage', () => {
+      const raw = window.localStorage.getItem(getSettingsStorageKey());
+      return raw && !raw.includes('browser-test-override') && !Object.hasOwn(JSON.parse(raw).api, 'apiKey');
+    });
+
+    const legacyState = createDefaultSettingsState();
+    legacyState.api.apiKey = 'legacy-browser-key-to-scrub';
+    legacyState.api.keySource = 'user-override';
+    window.localStorage.setItem(getSettingsStorageKey(), JSON.stringify(legacyState));
+    check('legacy clear-text API key remains available for the current session', () => {
+      return loadSettingsState().api.apiKey === 'legacy-browser-key-to-scrub';
+    });
+    check('legacy clear-text API key is scrubbed during load', () => {
+      const raw = window.localStorage.getItem(getSettingsStorageKey());
+      return raw && !raw.includes('legacy-browser-key-to-scrub') && !Object.hasOwn(JSON.parse(raw).api, 'apiKey');
+    });
 
     saveSettingsState(resetFinnhubApiKey(loadSettingsState()), { incrementEditCount: false });
-    check('API-key reset survives reload', () => {
+    check('API-key reset remains available in the page session', () => {
       const state = loadSettingsState();
       return state.api.apiKey === PREDEFINED_FINNHUB_API_KEY && state.api.keySource === 'predefined';
     });
@@ -121,8 +147,8 @@
     initSetupWizard();
 
     document.querySelector('.setup-footer .button--primary').click();
-    const renderedKeyInput = document.querySelector('.setup-step input[type="text"]');
-    check('wizard renders the active API key in plaintext', () => {
+    const renderedKeyInput = document.querySelector('.setup-step input[type="password"]');
+    check('wizard renders the active API key in a masked field', () => {
       return renderedKeyInput && renderedKeyInput.value === PREDEFINED_FINNHUB_API_KEY;
     });
     renderedKeyInput.value = 'browser-ui-override';

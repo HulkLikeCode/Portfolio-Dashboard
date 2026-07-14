@@ -142,13 +142,13 @@
       assert(Array.isArray(state.benchmarks), 'benchmarks should be an array.');
       assert(state.apiSettings.provider === 'finnhub', 'API settings metadata should identify Finnhub provider.');
       assert(state.apiSettings.hasApiKey === true, 'Default state should contain the predefined API key.');
-      assert(typeof state.apiSettings.apiKey === 'string' && state.apiSettings.apiKey.length > 0, 'Predefined API key should be stored.');
+      assert(!Object.hasOwn(state.apiSettings, 'apiKey'), 'Local state must not contain an API key.');
       assert(['system', 'dark', 'light'].includes(state.theme), 'Theme should be system, dark, or light.');
       assert(typeof state.accentColor === 'string', 'Accent color should be present.');
       assert(typeof state.fontScale === 'number', 'Font scale should be numeric.');
       assert(state.projectionHorizonYears >= 1 && state.projectionHorizonYears <= 10, 'Projection horizon should be 1 to 10 years.');
       assert(typeof state.monteCarloSettings === 'object', 'Monte Carlo settings should be an object.');
-      assert(state.exportPreferences.includeApiKeyInBackup === true, 'API key backup inclusion must default on.');
+      assert(state.exportPreferences.includeApiKeyInBackup === false, 'API key backup inclusion must default off.');
     }
 
     async function testLocalStorageRoundTrip() {
@@ -168,7 +168,7 @@
         hasApiKey: true,
         keySource: 'user-override',
         apiKeyLastUpdatedAt: '2026-01-02T00:00:00.000Z',
-        apiKey: 'fixture-key-that-must-persist'
+        apiKey: 'fixture-key-that-must-not-persist'
       };
 
       storage.writeStateNow(state);
@@ -179,10 +179,11 @@
       assert(restored.holdings.length === 1, 'Holdings should round-trip.');
       assert(restored.lots.length === 1, 'Lots should round-trip.');
       assert(restored.apiSettings.hasApiKey === true, 'API key metadata should round-trip.');
-      assert(restored.apiSettings.apiKey === 'fixture-key-that-must-persist', 'Version 2.3 API key must persist.');
+      assert(!Object.hasOwn(restored.apiSettings, 'apiKey'), 'The API key must not persist.');
+      assert(!window.localStorage.getItem(TEST_LOCAL_STORAGE_KEY).includes('fixture-key-that-must-not-persist'), 'Serialized state must exclude the API key.');
 
       const diagnosticSummary = summarizeApiSettingsForDiagnostics(restored.apiSettings);
-      assert(diagnosticSummary.apiKey === 'fixture-key-that-must-persist', 'Diagnostics summary must expose the active Version 2.3 key.');
+      assert(!Object.hasOwn(diagnosticSummary, 'apiKey'), 'Diagnostics metadata must exclude the API key.');
     }
 
     async function testDebouncedLocalStorageWrite() {
@@ -220,7 +221,7 @@
           provider: 'finnhub',
           hasApiKey: true,
           keySource: 'user-override',
-          apiKey: 'fixture-key-that-must-persist'
+          apiKey: 'fixture-key-that-must-not-persist'
         }
       }, { immediate: true });
 
@@ -230,8 +231,9 @@
       assert(state.projectionHorizonYears === 7, 'Projection horizon should persist.');
       assert(state.fontScale === 1.1, 'Font scale should persist.');
       assert(state.apiSettings.hasApiKey === true, 'API key metadata should persist.');
-      assert(state.apiSettings.apiKey === 'fixture-key-that-must-persist', 'Settings persistence must preserve the active API key.');
-      assert(state.exportPreferences.includeApiKeyInBackup === true, 'Backup must include the API key by default.');
+      assert(!Object.hasOwn(state.apiSettings, 'apiKey'), 'Settings persistence must exclude the active API key.');
+      assert(!window.localStorage.getItem(TEST_LOCAL_STORAGE_KEY).includes('fixture-key-that-must-not-persist'), 'Settings storage must not contain the API key.');
+      assert(state.exportPreferences.includeApiKeyInBackup === false, 'Backup must exclude the API key by default.');
     }
 
     async function testIndexedDbStores() {

@@ -25,10 +25,9 @@ historical-data pipeline, live-data services, and Phase 3A portfolio engine.
 Phase 3A is the accepted baseline described by the roadmap.
 
 The Version 2.3 predefined/editable Finnhub-key migration is implemented in
-this baseline: the key is centralized, plaintext and editable in setup,
-resettable, persisted, used by Finnhub clients by default, and available to
-diagnostics and future backup/export consumers. Phase 3B is the next roadmap
-phase; its UI files and tests are not present in this baseline.
+this baseline. Following the clear-text-storage security remediation, a
+user-entered replacement is kept only in page-session memory and is removed
+from legacy Local Storage state. It is excluded from backups by default.
 
 ## Approved architecture
 
@@ -46,11 +45,11 @@ phase; its UI files and tests are not present in this baseline.
 
 ## Version 2.3 key policy
 
-Version 2.3 defines a project-provided Finnhub key that is visible, editable,
-resettable, locally persisted, and included in applicable diagnostics, exports,
-and backups. The exact default and the authorized handling rules are maintained
-in Sections 6 and 7 of `requirements.md`; they should not be duplicated across
-supporting documents.
+Version 2.3 defines a project-provided Finnhub key that is editable and
+resettable. User-entered replacements are deliberately not persisted: they are
+held only in memory for the current page session and excluded from Local
+Storage, diagnostics metadata, exports, and backups. This security policy
+supersedes older roadmap text that calls for clear-text persistence.
 
 This owner-approved policy permits that Finnhub key in the private repository.
 It does not permit GitHub tokens, SSH private keys, local HTTPS private keys, or

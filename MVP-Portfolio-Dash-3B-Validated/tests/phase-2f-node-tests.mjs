@@ -481,8 +481,9 @@ test("Normalized errors and Diagnostics redact credentials", async () => {
   });
   const snapshot = await diagnostics.getSnapshot();
   assert.equal(JSON.stringify(snapshot).includes("super-secret-value"), false);
-  assert.equal(snapshot.security.apiKeyExposed, true);
-  assert.equal(typeof snapshot.activeApiKey, "string");
+  assert.equal(snapshot.security.apiKeyExposed, false);
+  assert.equal(snapshot.security.apiKeyLogged, false);
+  assert.equal(Object.hasOwn(snapshot, "activeApiKey"), false);
 });
 
 test("Source modules contain no request implementation for the forbidden historical endpoint", async () => {

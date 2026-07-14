@@ -1,6 +1,10 @@
 import { BenchmarkEngine } from "../benchmarks/benchmark-engine.js";
 import { DEFAULT_BENCHMARK_TICKERS } from "../benchmarks/benchmark-model.js";
-import { MAX_ACTIVE_SYMBOLS, SymbolRegistry } from "../core/symbol-registry.js";
+import {
+  MAX_ACTIVE_SYMBOLS,
+  SYMBOL_REGISTRY_CHANGED_EVENT,
+  SymbolRegistry
+} from "../core/symbol-registry.js";
 import { loadSettingsState, saveSettingsState } from "../settings/settings-state.js";
 import { createBenchmarkManagementServices } from "./benchmark-management-services.js";
 
@@ -211,7 +215,7 @@ export class BenchmarkManager {
     this.state = this.saveState(nextState, { incrementEditCount: true });
     this.render();
     this.announce(message);
-    window.dispatchEvent(new CustomEvent("mvp:symbol-registry-changed", {
+    window.dispatchEvent(new CustomEvent(SYMBOL_REGISTRY_CHANGED_EVENT, {
       detail: { registryRevision: this.state.registryRevision, dependentDataState: this.state.dependentDataState }
     }));
   }
