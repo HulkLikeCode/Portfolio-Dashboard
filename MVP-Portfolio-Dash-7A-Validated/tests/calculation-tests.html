@@ -1,0 +1,1244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 3A, 4A, and 6A Calculation Tests</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { max-width: 980px; margin: 0 auto; padding: 1.25rem; line-height: 1.45; }
+    button { min-height: 44px; font: inherit; padding: .6rem .9rem; }
+    .summary { margin: 1rem 0; padding: .85rem; border: 1px solid currentColor; border-radius: .35rem; }
+    .pass { color: #16723a; }
+    .fail { color: #b42318; }
+    li { margin: .55rem 0; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    code { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Phase 3A, 4A, and 6A Calculation Tests</h1>
+    <p>
+      Deterministic Phase 3A tests under the Version 2.3 baseline for holdings, multiple lots, validation,
+      quote snapshots, stale fallback, partial valuation, and Historical Data
+      Service-backed modeled account value.
+      Phase 4A checks cover benchmark records, shared active symbols, cap enforcement,
+      service validation, local-history status, and invalidation.
+      Phase 6A checks cover split-adjusted, dividend-unadjusted price-return
+      approximations, exact-date alignment, CAGR, alpha, beta, and headline drawdown.
+    </p>
+    <button id="run-tests" type="button">Run tests</button>
+    <div id="summary" class="summary" aria-live="polite">Tests have not run.</div>
+    <ol id="results"></ol>
+  </main>
+
+  <script type="module">
+    import { createLot } from "../js/portfolio/lot-model.js";
+    import {
+      addLotToHolding,
+      createPortfolio,
+      editLot
+    } from "../js/portfolio/portfolio-model.js";
+    import {
+      assertValidPortfolio,
+      validatePortfolio
+    } from "../js/portfolio/portfolio-validation.js";
+    import {
+      buildHistoricalPerformanceSeries,
+      calculateHoldingCostBasis,
+      calculateHoldingShares,
+      calculateLotCost,
+      calculatePortfolioCostBasis,
+      calculatePortfolioInceptionDate,
+      calculatePortfolioSnapshot,
+      calculatePositionValue,
+      createPortfolioEngine,
+      normalizeQuoteSnapshot,
+      PORTFOLIO_SERIES_LABELS
+    } from "../js/portfolio/portfolio-engine.js";
+    import { nearlyEqual } from "../js/utils/number-utils.js";
+    import {
+      createBenchmark,
+      seedDefaultBenchmarks
+    } from "../js/benchmarks/benchmark-model.js";
+    import { BenchmarkEngine } from "../js/benchmarks/benchmark-engine.js";
+    import {
+      SymbolRegistry,
+      assertActiveSymbolLimit
+    } from "../js/core/symbol-registry.js";
+    import {
+      PRICE_RETURN_APPROXIMATION_LABEL,
+      buildDailyArithmeticReturns,
+      buildDailyLogReturns,
+      buildNormalizedPerformanceSeries
+    } from "../js/analytics/return-series.js";
+    import { alignSeriesByExactDate } from "../js/analytics/date-alignment.js";
+    import { calculateCagr } from "../js/analytics/cagr.js";
+    import { calculateAlphaBeta, calculateBeta } from "../js/analytics/alpha-beta.js";
+    import { calculateMaximumDrawdown } from "../js/analytics/drawdown.js";
+    import {
+      buildAcquisitionAwarePerformanceSeries,
+      createAnalyticsEngine
+    } from "../js/analytics/analytics-engine.js";
+
+    const referenceDate = "2030-01-01";
+    const tests = [];
+    const test = (name, fn) => tests.push({ name, fn });
+    const assert = (condition, message = "Assertion failed") => {
+      if (!condition) throw new Error(message);
+    };
+    const assertEqual = (actual, expected, message = "Values differ") => {
+      if (actual !== expected) throw new Error(`${message}: expected ${expected}, received ${actual}`);
+    };
+    const assertNear = (actual, expected, tolerance = 1e-10, message = "Values differ") => {
+      if (!nearlyEqual(actual, expected, tolerance)) {
+        throw new Error(`${message}: expected ${expected}, received ${actual}`);
+      }
+    };
+    const assertThrows = (fn, expectedCode = null) => {
+      let thrown = null;
+      try { fn(); } catch (error) { thrown = error; }
+      if (!thrown) throw new Error("Expected function to throw");
+      if (expectedCode && thrown.code !== expectedCode) {
+        throw new Error(`Expected code ${expectedCode}, received ${thrown.code}`);
+      }
+    };
+
+    const idFactory = (() => {
+      let count = 0;
+      return (prefix) => `${prefix}-test-${++count}`;
+    })();
+
+    function basePortfolioInput() {
+      return {
+        id: "portfolio-test",
+        name: "Test Portfolio",
+        benchmarks: [{ id: "benchmark-dco", recordType: "benchmark", ticker: "DCO" }],
+        holdings: [
+          {
+            id: "holding-dco",
+            ticker: "DCO",
+            active: true,
+            lots: [
+              { id: "lot-dco-1", ticker: "DCO", shares: 1.5, purchasePricePerShare: 10, acquisitionDate: "2020-01-02", auditNote: "Initial lot" },
+              { id: "lot-dco-2", ticker: "DCO", shares: 0.5, purchasePricePerShare: 10, acquisitionDate: "2020-01-03", auditNote: "Second lot" }
+            ]
+          },
+          {
+            id: "holding-vtv",
+            ticker: "VTV",
+            active: true,
+            lots: [
+              { id: "lot-vtv-1", ticker: "VTV", shares: 1, purchasePricePerShare: 20, acquisitionDate: "2020-01-02", auditNote: "Value holding" }
+            ]
+          }
+        ]
+      };
+    }
+
+    function historicalPortfolioInput() {
+      return {
+        id: "portfolio-history",
+        name: "Historical Test",
+        benchmarks: [{
+          id: "benchmark-spy",
+          recordType: "benchmark",
+          ticker: "SPY",
+          label: "S&P 500",
+          active: true
+        }],
+        holdings: [
+          {
+            id: "holding-aaa",
+            ticker: "AAA",
+            active: true,
+            lots: [
+              { id: "lot-aaa-1", ticker: "AAA", shares: 1, purchasePricePerShare: 10, acquisitionDate: "2020-01-02", auditNote: "" },
+              { id: "lot-aaa-2", ticker: "AAA", shares: 1, purchasePricePerShare: 12, acquisitionDate: "2020-01-04", auditNote: "Later contribution" }
+            ]
+          },
+          {
+            id: "holding-bbb",
+            ticker: "BBB",
+            active: true,
+            lots: [
+              { id: "lot-bbb-1", ticker: "BBB", shares: 2, purchasePricePerShare: 20, acquisitionDate: "2020-01-02", auditNote: "" }
+            ]
+          }
+        ]
+      };
+    }
+
+    test("Lot cost preserves fractional-share precision", () => {
+      assertNear(calculateLotCost({ shares: 1.25, purchasePricePerShare: 8.4 }), 10.5);
+    });
+
+    test("Multiple lots consolidate shares and cost basis under one holding", () => {
+      const holding = basePortfolioInput().holdings[0];
+      assertNear(calculateHoldingShares(holding), 2);
+      assertNear(calculateHoldingCostBasis(holding), 20);
+    });
+
+    test("Portfolio cost basis is deterministic", () => {
+      assertNear(calculatePortfolioCostBasis(basePortfolioInput(), { referenceDate }), 40);
+    });
+
+    test("Default portfolio lots preserve exact total cost basis", () => {
+      const defaults = {
+        holdings: [
+          { ticker: "DCO", lots: [{ ticker: "DCO", shares: 39, purchasePricePerShare: 145.17948, acquisitionDate: "2026-05-15" }] },
+          { ticker: "VTV", lots: [{ ticker: "VTV", shares: 547, purchasePricePerShare: 207.0364, acquisitionDate: "2026-05-15" }] },
+          { ticker: "ONEQ", lots: [{ ticker: "ONEQ", shares: 918, purchasePricePerShare: 104.06513, acquisitionDate: "2026-05-15" }] }
+        ]
+      };
+      assertNear(calculatePortfolioCostBasis(defaults, { referenceDate }), 214442.69986);
+    });
+
+    test("Position value uses full Number precision", () => {
+      assertNear(calculatePositionValue(1.25, 12.8), 16);
+    });
+
+    test("Current snapshot calculates value, gain/loss, and weights", () => {
+      const snapshot = calculatePortfolioSnapshot(
+        basePortfolioInput(),
+        { DCO: { c: 12, t: 1700000000 }, VTV: 30 },
+        { referenceDate }
+      );
+      assert(snapshot.complete);
+      assertNear(snapshot.portfolioValue, 54);
+      assertNear(snapshot.unrealizedGainLoss, 14);
+      assertNear(snapshot.positions[0].weight, 24 / 54);
+      assertNear(snapshot.positions[1].weight, 30 / 54);
+      assertEqual(snapshot.state, "current");
+    });
+
+    test("Missing quote produces partial value and no misleading total gain/loss", () => {
+      const snapshot = calculatePortfolioSnapshot(basePortfolioInput(), { DCO: 12 }, { referenceDate });
+      assertEqual(snapshot.complete, false);
+      assertEqual(snapshot.valueIsPartial, true);
+      assertNear(snapshot.portfolioValue, 24);
+      assertEqual(snapshot.unrealizedGainLoss, null);
+      assertNear(snapshot.partialUnrealizedGainLoss, 4);
+      assertEqual(snapshot.missingPriceSymbols[0], "VTV");
+      assertEqual(snapshot.weightBasis, "available-market-value-only");
+    });
+
+    test("Phase 2F cached quote fallback is usable and labeled stale", () => {
+      const quotes = {
+        DCO: { data: { c: 12 }, source: "cache", availability: "stale", stale: true },
+        VTV: { data: { c: 30 }, source: "live", availability: "available", stale: false }
+      };
+      const snapshot = calculatePortfolioSnapshot(basePortfolioInput(), quotes, { referenceDate });
+      assert(snapshot.complete);
+      assert(snapshot.hasStaleQuotes);
+      assertEqual(snapshot.state, "stale");
+      assertEqual(snapshot.positions[0].quoteSource, "cache");
+      assertEqual(snapshot.positions[0].quoteStale, true);
+    });
+
+    test("Quote normalization rejects zero, NaN, and Infinity", () => {
+      assertEqual(normalizeQuoteSnapshot({ c: 0 }).available, false);
+      assertEqual(normalizeQuoteSnapshot({ c: NaN }).available, false);
+      assertEqual(normalizeQuoteSnapshot({ c: Infinity }).available, false);
+    });
+
+    test("Same ticker holding and benchmark remain distinct", () => {
+      const result = validatePortfolio(basePortfolioInput(), { referenceDate });
+      assert(result.valid, JSON.stringify(result.errors));
+      assertEqual(result.normalized.holdings[0].ticker, "DCO");
+      assertEqual(result.normalized.benchmarks[0].recordType, "benchmark");
+    });
+
+    test("Duplicate holdings are rejected while duplicate ticker lots are valid", () => {
+      const valid = validatePortfolio(basePortfolioInput(), { referenceDate });
+      assert(valid.valid);
+      const input = basePortfolioInput();
+      input.holdings.push({ ...input.holdings[0], id: "duplicate-dco" });
+      const invalid = validatePortfolio(input, { referenceDate });
+      assert(!invalid.valid);
+      assert(invalid.errors.some((error) => error.code === "PORTFOLIO_DUPLICATE_HOLDING"));
+    });
+
+    test("Validation rejects invalid ticker, dates, values, NaN, and Infinity", () => {
+      const cases = [
+        { field: "ticker", value: "1BAD" },
+        { field: "shares", value: 0 },
+        { field: "shares", value: -1 },
+        { field: "shares", value: NaN },
+        { field: "shares", value: Infinity },
+        { field: "purchasePricePerShare", value: 0 },
+        { field: "purchasePricePerShare", value: -2 },
+        { field: "acquisitionDate", value: "2020-02-31" },
+        { field: "acquisitionDate", value: "2031-01-01" }
+      ];
+      cases.forEach(({ field, value }) => {
+        const input = basePortfolioInput();
+        input.holdings[0].lots[0][field] = value;
+        if (field === "ticker") input.holdings[0].ticker = value;
+        const result = validatePortfolio(input, { referenceDate });
+        assert(!result.valid, `Expected invalid ${field}: ${String(value)}`);
+      });
+    });
+
+    test("Malformed persisted arrays are rejected", () => {
+      assert(!validatePortfolio({ holdings: {} }, { referenceDate }).valid);
+      const input = basePortfolioInput();
+      input.holdings[0].lots = "not-an-array";
+      assert(!validatePortfolio(input, { referenceDate }).valid);
+    });
+
+    test("Adding to an existing holding creates a distinct lot", () => {
+      const portfolio = createPortfolio(basePortfolioInput(), { referenceDate, idFactory });
+      const updated = addLotToHolding(portfolio, "holding-dco", {
+        shares: 0.25,
+        purchasePricePerShare: 11,
+        acquisitionDate: "2020-01-04",
+        auditNote: "Added shares"
+      }, { referenceDate, idFactory });
+      assertEqual(updated.holdings[0].lots.length, 3);
+      assert(updated.holdings[0].lots[2].id !== updated.holdings[0].lots[0].id);
+      assertNear(calculateHoldingShares(updated.holdings[0]), 2.25);
+    });
+
+    test("Explicit lot edit preserves lot identity", () => {
+      const portfolio = createPortfolio(basePortfolioInput(), { referenceDate, idFactory });
+      const updated = editLot(portfolio, "holding-dco", "lot-dco-1", {
+        shares: 1.75,
+        auditNote: "Manual audited correction"
+      }, { referenceDate, idFactory });
+      assertEqual(updated.holdings[0].lots[0].id, "lot-dco-1");
+      assertNear(updated.holdings[0].lots[0].shares, 1.75);
+      assertEqual(updated.holdings[0].lots[0].auditNote, "Manual audited correction");
+    });
+
+    test("Portfolio inception uses earliest active acquisition date", () => {
+      assertEqual(calculatePortfolioInceptionDate(basePortfolioInput(), { referenceDate }), "2020-01-02");
+    });
+
+    test("Historical lot activates on first aligned date on or after acquisition", async () => {
+      const service = {
+        async getAlignedSeries() {
+          return {
+            symbols: ["AAA", "BBB"],
+            available: true,
+            state: "current",
+            states: ["current"],
+            rows: [
+              { date: "2020-01-02", closes: { AAA: 10, BBB: 20 } },
+              { date: "2020-01-03", closes: { AAA: 11, BBB: 21 } },
+              { date: "2020-01-06", closes: { AAA: 12, BBB: 22 } },
+              { date: "2020-01-07", closes: { AAA: 13, BBB: 22 } }
+            ],
+            counts: { returnedObservationCount: 4, returnObservationCount: 3 },
+            provenance: {}, warnings: [], serviceVersion: "2.2-phase-2e-test"
+          };
+        }
+      };
+      const result = await buildHistoricalPerformanceSeries(historicalPortfolioInput(), service, { referenceDate });
+      assertNear(result.rows[0].accountValue, 50);
+      assertNear(result.rows[1].accountValue, 53);
+      assertNear(result.rows[2].accountValue, 68);
+      assertEqual(result.rows[1].activeLotCount, 2);
+      assertEqual(result.rows[2].activeLotCount, 3);
+      assertEqual(result.rows[2].activatedLotIds[0], "lot-aaa-2");
+      assertNear(result.rows[2].externalFlowMarketValue, 12);
+    });
+
+    test("New contribution does not appear as investment return", async () => {
+      const service = {
+        async getAlignedSeries() {
+          return {
+            available: true, state: "current", states: ["current"],
+            rows: [
+              { date: "2020-01-02", closes: { AAA: 10, BBB: 20 } },
+              { date: "2020-01-03", closes: { AAA: 10, BBB: 20 } },
+              { date: "2020-01-06", closes: { AAA: 10, BBB: 20 } }
+            ],
+            counts: {}, provenance: {}, warnings: [], serviceVersion: "test"
+          };
+        }
+      };
+      const result = await buildHistoricalPerformanceSeries(historicalPortfolioInput(), service, { referenceDate });
+      assertNear(result.rows[0].normalizedPriceReturnIndex, 100);
+      assertNear(result.rows[1].normalizedPriceReturnIndex, 100);
+      assertNear(result.rows[2].normalizedPriceReturnIndex, 100);
+      assertNear(result.rows[2].accountValue, 60);
+    });
+
+    test("Partial historical range preserves available rows without backfilling", async () => {
+      const service = {
+        async getAlignedSeries() {
+          return {
+            available: true,
+            state: "insufficient",
+            states: ["insufficient"],
+            rows: [
+              { date: "2020-01-03", closes: { AAA: 11, BBB: 21 } },
+              { date: "2020-01-06", closes: { AAA: 12, BBB: 22 } }
+            ],
+            counts: { returnedObservationCount: 2, requiredCloseCount: 4 },
+            provenance: {},
+            warnings: [{ code: "HISTORICAL_ALIGNMENT_INSUFFICIENT" }],
+            serviceVersion: "test"
+          };
+        }
+      };
+      const result = await buildHistoricalPerformanceSeries(
+        historicalPortfolioInput(),
+        service,
+        { referenceDate }
+      );
+      assertEqual(result.available, true);
+      assertEqual(result.state, "insufficient");
+      assertEqual(result.rows.length, 2);
+      assertEqual(result.rows[0].date, "2020-01-03");
+      assertEqual(result.rows[1].date, "2020-01-06");
+      assertNear(result.rows[0].accountValue, 53);
+      assertNear(result.rows[1].accountValue, 68);
+    });
+
+    test("Partial historical availability is surfaced without fabricated rows", async () => {
+      const service = {
+        async getAlignedSeries() {
+          return {
+            available: false,
+            state: "missing",
+            states: ["missing", "insufficient"],
+            missingSymbols: ["BBB"],
+            rows: [], counts: { returnedObservationCount: 0 }, provenance: {},
+            warnings: [{ code: "HISTORICAL_ALIGNMENT_SYMBOLS_MISSING" }],
+            serviceVersion: "test"
+          };
+        }
+      };
+      const result = await buildHistoricalPerformanceSeries(historicalPortfolioInput(), service, { referenceDate });
+      assertEqual(result.available, false);
+      assertEqual(result.rows.length, 0);
+      assertEqual(result.state, "missing");
+      assert(result.states.includes("insufficient"));
+    });
+
+    test("Historical output carries required Version 2.2 labels", async () => {
+      const service = {
+        async getAlignedSeries() {
+          return {
+            available: true, state: "quality-warning", states: ["quality-warning"],
+            rows: [
+              { date: "2020-01-02", closes: { AAA: 10, BBB: 20 } },
+              { date: "2020-01-03", closes: { AAA: 11, BBB: 18 } }
+            ],
+            counts: {}, provenance: { AAA: { source: "Stooq" } },
+            warnings: [{ code: "TEST_WARNING" }], serviceVersion: "2.2-phase-2e-test"
+          };
+        }
+      };
+      const result = await buildHistoricalPerformanceSeries(historicalPortfolioInput(), service, { referenceDate });
+      assertEqual(result.accountValueLabel, PORTFOLIO_SERIES_LABELS.ACCOUNT_VALUE);
+      assertEqual(result.label, PORTFOLIO_SERIES_LABELS.HISTORICAL_PRICE_RETURN);
+      assertEqual(result.priceAdjustment, "split-adjusted");
+      assertEqual(result.dividendAdjustment, "none");
+      assertEqual(result.exactTotalReturn, false);
+      assertEqual(result.brokerageReconciled, false);
+      assertEqual(result.taxAdjusted, false);
+      assertEqual(result.corporateActionsApplied, false);
+      assertEqual(result.state, "quality-warning");
+    });
+
+    test("PortfolioEngine wrapper consumes only injected Historical Data Service", async () => {
+      let calls = 0;
+      const engine = createPortfolioEngine({
+        historicalDataService: {
+          async getAlignedSeries(symbols) {
+            calls += 1;
+            assertEqual(symbols.join(","), "AAA,BBB");
+            return {
+              available: true, state: "current", states: ["current"],
+              rows: [{ date: "2020-01-02", closes: { AAA: 10, BBB: 20 } }],
+              counts: {}, provenance: {}, warnings: [], serviceVersion: "test"
+            };
+          }
+        }
+      });
+      const result = await engine.getHistoricalAccountValueSeries(historicalPortfolioInput(), { referenceDate });
+      assertEqual(calls, 1);
+      assertEqual(result.rows.length, 1);
+    });
+
+    test("Historical calculation rejects missing service and invalid close data", async () => {
+      let missingServiceThrown = false;
+      try {
+        await buildHistoricalPerformanceSeries(historicalPortfolioInput(), null, { referenceDate });
+      } catch (error) {
+        missingServiceThrown = error.code === "HISTORICAL_SERVICE_REQUIRED";
+      }
+      assert(missingServiceThrown);
+
+      let invalidCloseThrown = false;
+      try {
+        await buildHistoricalPerformanceSeries(historicalPortfolioInput(), {
+          async getAlignedSeries() {
+            return {
+              available: true, state: "current", states: ["current"],
+              rows: [{ date: "2020-01-02", closes: { AAA: 10, BBB: NaN } }],
+              counts: {}, provenance: {}, warnings: []
+            };
+          }
+        }, { referenceDate });
+      } catch (error) {
+        invalidCloseThrown = error.code === "HISTORICAL_CLOSE_INVALID";
+      }
+      assert(invalidCloseThrown);
+    });
+
+    test("Lot model rejects future dates and nonpositive values", () => {
+      assertThrows(() => createLot({
+        ticker: "DCO", shares: 0, purchasePricePerShare: 10, acquisitionDate: "2020-01-02"
+      }, { referenceDate }), "LOT_SHARES_INVALID");
+      assertThrows(() => createLot({
+        ticker: "DCO", shares: 1, purchasePricePerShare: 10, acquisitionDate: "2031-01-01"
+      }, { referenceDate }), "LOT_ACQUISITION_DATE_FUTURE");
+    });
+
+    test("Phase 4A seeds five ordinary editable benchmark records", () => {
+      const defaults = seedDefaultBenchmarks();
+      assertEqual(defaults.map((item) => item.ticker).join(","), "SPY,IWM,AVUV,AVDV,PSCH");
+      const edited = createBenchmark({ ...defaults[0], label: "US large cap", active: false });
+      assertEqual(edited.label, "US large cap");
+      assertEqual(edited.active, false);
+      assertEqual(Object.hasOwn(edited, "shares"), false);
+      assertEqual(Object.hasOwn(edited, "lots"), false);
+      assertEqual(Object.hasOwn(edited, "costBasis"), false);
+    });
+
+    test("Symbol Registry preserves separate same-ticker holding and benchmark records", () => {
+      const state = {
+        holdings: [{ id: "holding-spy", ticker: "SPY", label: "SPY holding", active: true }],
+        benchmarks: [{ id: "benchmark-spy", ticker: "SPY", label: "SPY benchmark", active: true }]
+      };
+      const registry = new SymbolRegistry(state);
+      assertEqual(registry.records().length, 2);
+      assertEqual(registry.activeCount(), 1, "Same ticker should consume one provider symbol slot");
+      const next = registry.removeRecord("benchmark", "benchmark-spy");
+      assertEqual(next.records().length, 1);
+      assertEqual(next.find("holding", "holding-spy").label, "SPY holding");
+    });
+
+    test("Symbol Registry permits inactive storage and blocks activation of a 26th symbol", () => {
+      const holdings = Array.from({ length: 25 }, (_, index) => ({
+        id: `holding-${index}`,
+        ticker: `T${index}`,
+        active: true
+      }));
+      const state = {
+        holdings,
+        benchmarks: [{ id: "benchmark-extra", ticker: "EXTRA", label: "Extra", active: false }]
+      };
+      const registry = assertActiveSymbolLimit(state);
+      assertEqual(registry.filter("extra", "inactive").length, 1);
+      assertThrows(
+        () => registry.setActive("benchmark", "benchmark-extra", true),
+        "ACTIVE_SYMBOL_LIMIT_REACHED"
+      );
+      const room = registry.setActive("holding", "holding-0", false);
+      assertEqual(room.setActive("benchmark", "benchmark-extra", true).activeCount(), 25);
+    });
+
+    test("Benchmark Engine validates through Symbol Service and reports quote-only history", async () => {
+      let validationCalls = 0;
+      let historyCalls = 0;
+      const engine = new BenchmarkEngine({
+        symbolService: {
+          async validateSymbol(symbol) {
+            validationCalls += 1;
+            return { symbol: String(symbol).toUpperCase(), valid: true, match: { description: "Test index" } };
+          }
+        },
+        historicalDataService: {
+          async getDatasetStatus() {
+            historyCalls += 1;
+            return { state: "missing", available: false };
+          }
+        },
+        idFactory: () => "benchmark-test"
+      });
+      const original = {
+        holdings: [{ id: "holding-xyz", ticker: "XYZ", active: true }],
+        benchmarks: [],
+        dependentDataState: {}
+      };
+      const result = await engine.add(original, { ticker: "XYZ", label: "", active: true }, {
+        invalidatedAt: "2030-01-01T00:00:00.000Z"
+      });
+      assertEqual(validationCalls, 1);
+      assertEqual(historyCalls, 1);
+      assertEqual(result.validation.quoteOnly, true);
+      assertEqual(result.state.holdings.length, 1);
+      assertEqual(result.state.benchmarks.length, 1);
+      assertEqual(result.state.activeSymbols.join(","), "XYZ");
+      assertEqual(result.state.dependentDataState.charts, "stale");
+      assertEqual(result.state.dependentDataState.analytics, "stale");
+      assertEqual(result.state.dependentDataState.simulations, "stale");
+    });
+
+    test("Benchmark Engine cannot bypass the cap through a generic edit", () => {
+      const engine = new BenchmarkEngine({
+        symbolService: { async validateSymbol(symbol) { return { symbol, valid: true }; } },
+        historicalDataService: { async getDatasetStatus() { return { state: "current", available: true }; } }
+      });
+      const state = {
+        holdings: Array.from({ length: 25 }, (_, index) => ({
+          id: `engine-cap-${index}`, ticker: `E${index}`, active: true
+        })),
+        benchmarks: [{ id: "engine-extra", ticker: "EXTRA", active: false }]
+      };
+      assertThrows(
+        () => engine.edit(state, "engine-extra", { active: true }),
+        "ACTIVE_SYMBOL_LIMIT_REACHED"
+      );
+    });
+
+    test("Benchmark edit flags persist and deletion never changes same-ticker holding", async () => {
+      const engine = new BenchmarkEngine({
+        symbolService: { async validateSymbol(symbol) { return { symbol, valid: true }; } },
+        historicalDataService: { async getDatasetStatus() { return { state: "current", available: true }; } }
+      });
+      const state = {
+        holdings: [{ id: "holding-spy", ticker: "SPY", label: "Owned SPY", active: true }],
+        benchmarks: [{ id: "benchmark-spy", ticker: "SPY", label: "SPY", active: true, includeInCharts: true, includeInProjectionTables: true }]
+      };
+      const edited = engine.edit(state, "benchmark-spy", {
+        label: "Market comparator",
+        includeInCharts: false,
+        includeInProjectionTables: false
+      }).state;
+      assertEqual(edited.benchmarks[0].label, "Market comparator");
+      assertEqual(edited.benchmarks[0].includeInCharts, false);
+      assertEqual(edited.benchmarks[0].includeInProjectionTables, false);
+      assertEqual(engine.chartBenchmarks(edited).length, 0);
+      assertEqual(engine.projectionTableBenchmarks(edited).length, 0);
+      const deleted = engine.delete(edited, "benchmark-spy").state;
+      assertEqual(deleted.benchmarks.length, 0);
+      assertEqual(deleted.holdings.length, 1);
+      assertEqual(deleted.holdings[0].label, "Owned SPY");
+    });
+
+    test("Benchmark Engine restores a just-deleted stored record without provider validation", () => {
+      let validationCalls = 0;
+      const engine = new BenchmarkEngine({
+        symbolService: { async validateSymbol() { validationCalls += 1; return { valid: false }; } },
+        historicalDataService: { async getDatasetStatus() { return { state: "current", available: true }; } }
+      });
+      const original = {
+        holdings: [],
+        benchmarks: [{ id: "benchmark-spy", ticker: "SPY", label: "SPY", active: true, builtIn: true }]
+      };
+      const removed = engine.delete(original, "benchmark-spy").state;
+      const restored = engine.restore(removed, original.benchmarks[0], {
+        label: "Re-added SPY",
+        active: true
+      });
+      assertEqual(validationCalls, 0);
+      assertEqual(restored.benchmark.ticker, "SPY");
+      assertEqual(restored.benchmark.label, "Re-added SPY");
+      assertEqual(restored.benchmark.builtIn, false);
+      assertEqual(restored.state.benchmarks.length, 1);
+    });
+
+    test("Phase 6A arithmetic and log returns match hand calculations", () => {
+      const closes = [
+        { date: "2024-01-02", close: 100 },
+        { date: "2024-01-03", close: 110 },
+        { date: "2024-01-04", close: 99 }
+      ];
+      const arithmetic = buildDailyArithmeticReturns(closes);
+      const logarithmic = buildDailyLogReturns(closes);
+      assert(arithmetic.available);
+      assert(logarithmic.available);
+      assertNear(arithmetic.values[0], 0.1);
+      assertNear(arithmetic.values[1], -0.1);
+      assertNear(logarithmic.values[0], 0.09531017980432493);
+      assertNear(logarithmic.values[1], -0.10536051565782628);
+      assertEqual(arithmetic.rows[0].startDate, "2024-01-02");
+      assertEqual(arithmetic.rows[0].endDate, "2024-01-03");
+      assertEqual(arithmetic.label, PRICE_RETURN_APPROXIMATION_LABEL);
+      assertEqual(arithmetic.exactTotalReturn, false);
+      assertEqual(arithmetic.dividendReinvested, false);
+    });
+
+    test("Phase 6A normalization preserves returns at an arbitrary positive base", () => {
+      const normalized = buildNormalizedPerformanceSeries([
+        { date: "2024-01-02", close: 40 },
+        { date: "2024-01-03", close: 50 },
+        { date: "2024-01-04", close: 45 }
+      ], { baseValue: 200 });
+      assert(normalized.available);
+      assertNear(normalized.values[0], 200);
+      assertNear(normalized.values[1], 250);
+      assertNear(normalized.values[2], 225);
+      assertEqual(normalized.counts.observationCount, 3);
+    });
+
+    test("Phase 6A exact-date alignment excludes missing sessions without filling", () => {
+      const aligned = alignSeriesByExactDate([
+        { date: "2024-01-02", value: 100 },
+        { date: "2024-01-03", value: 101 },
+        { date: "2024-01-04", value: 102 }
+      ], [
+        { date: "2024-01-02", value: 200 },
+        { date: "2024-01-04", value: 204 },
+        { date: "2024-01-05", value: 205 }
+      ], { minimumObservations: 2 });
+      assert(aligned.available);
+      assertEqual(aligned.dates.join(","), "2024-01-02,2024-01-04");
+      assertEqual(aligned.counts.alignedObservationCount, 2);
+      assertEqual(aligned.counts.droppedLeftObservationCount, 1);
+      assertEqual(aligned.counts.droppedRightObservationCount, 1);
+      assert(aligned.warnings.some((item) => item.code === "ANALYTICS_DATES_EXACT_INTERSECTION"));
+    });
+
+    test("Phase 6A CAGR uses valid endpoints and partial elapsed years", () => {
+      // 100 -> 121 over 182 of the 366 days in this anniversary year.
+      const partial = calculateCagr(100, 121, "2020-01-01", "2020-07-01");
+      assert(partial.available);
+      assertEqual(partial.elapsedDays, 182);
+      assertNear(partial.elapsedYears, 182 / 366);
+      assertNear(partial.cagr, 0.46717010745977694);
+
+      // 100 -> 110 over the 365 days from 2021-01-01 through 2022-01-01.
+      const annual = calculateCagr(100, 110, "2021-01-01", "2022-01-01");
+      assert(annual.available);
+      assertEqual(annual.elapsedDays, 365);
+      assertNear(annual.elapsedYears, 1);
+      assertNear(annual.cagr, 0.1);
+      assertEqual(annual.dayCountConvention, "ACT/ACT anniversary");
+    });
+
+    test("Phase 6A beta and alpha match an independently checkable linear fixture", () => {
+      const benchmark = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: 0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: -0.02 },
+        { date: "2024-01-05", startDate: "2024-01-04", value: 0.03 },
+        { date: "2024-01-08", startDate: "2024-01-05", value: 0 }
+      ];
+      // Each portfolio return is exactly 0.002 + 1.5 * benchmark return.
+      const portfolio = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: 0.017 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: -0.028 },
+        { date: "2024-01-05", startDate: "2024-01-04", value: 0.047 },
+        { date: "2024-01-08", startDate: "2024-01-05", value: 0.002 }
+      ];
+      const beta = calculateBeta(portfolio, benchmark, { benchmark: { ticker: "SPY" } });
+      assert(beta.available);
+      assertNear(beta.beta, 1.5);
+      const combined = calculateAlphaBeta(portfolio, benchmark, {
+        data: { rateDecimal: 0, instrument: "3-Month U.S. Treasury Bill" },
+        source: "U.S. Treasury Fiscal Data",
+        availability: "available",
+        stale: false
+      }, { benchmark: { ticker: "SPY" }, periodsPerYear: 252 });
+      assert(combined.available);
+      assertNear(combined.beta, 1.5);
+      assertNear(combined.alpha, 0.504);
+      assertNear(combined.alphaResult.periodicAlpha, 0.002);
+      assertEqual(combined.alphaResult.riskFreeRateSource, "U.S. Treasury Fiscal Data");
+      assertEqual(combined.counts.alignedReturnObservationCount, 4);
+    });
+
+    test("Phase 6A risk-free conversion uses the same daily periodicity", () => {
+      const benchmark = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: -0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.01 }
+      ];
+      const portfolio = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: -0.015 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.015 }
+      ];
+      const result = calculateAlphaBeta(portfolio, benchmark, {
+        data: { rateDecimal: 0.05 }, source: "U.S. Treasury Fiscal Data"
+      }, { periodsPerYear: 252 });
+      assert(result.available);
+      assertNear(result.alphaResult.periodicRiskFreeRate, 0.00019363050654397362);
+      assertEqual(result.alphaResult.periodsPerYear, 252);
+    });
+
+    test("Phase 6A accepts stale cached Treasury provenance and labels alpha stale", () => {
+      const benchmark = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: -0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.01 }
+      ];
+      const portfolio = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: -0.015 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.015 }
+      ];
+      const result = calculateAlphaBeta(portfolio, benchmark, {
+        data: { rateDecimal: 0.04 },
+        source: "cache",
+        availability: "stale",
+        stale: true,
+        provenance: { provider: "U.S. Treasury Fiscal Data" }
+      });
+      assert(result.available);
+      assertEqual(result.alphaResult.state, "stale");
+      assertEqual(result.alphaResult.riskFreeRateSource, "U.S. Treasury Fiscal Data (cache)");
+      assert(result.alphaResult.warnings.some((item) => item.code === "ANALYTICS_RISK_FREE_RATE_STALE"));
+    });
+
+    test("Phase 6A missing risk-free rate leaves beta available and alpha unavailable", () => {
+      const benchmark = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: -0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.01 }
+      ];
+      const portfolio = [
+        { date: "2024-01-03", startDate: "2024-01-02", value: -0.015 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.015 }
+      ];
+      const result = calculateAlphaBeta(portfolio, benchmark, null);
+      assertEqual(result.available, false);
+      assertEqual(result.partial, true);
+      assertNear(result.beta, 1.5);
+      assertEqual(result.alpha, null);
+      assertEqual(result.alphaResult.value, null);
+    });
+
+    test("Phase 6A rejects mismatched return intervals and zero benchmark variance", () => {
+      const intervalMismatch = calculateBeta([
+        { date: "2024-01-03", startDate: "2024-01-01", value: 0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.02 }
+      ], [
+        { date: "2024-01-03", startDate: "2024-01-02", value: 0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.02 }
+      ]);
+      assertEqual(intervalMismatch.available, false);
+      assertEqual(intervalMismatch.state, "misaligned");
+      assert(intervalMismatch.warnings.some((item) => item.code === "ANALYTICS_RETURN_INTERVALS_MISALIGNED"));
+
+      const zeroVariance = calculateBeta([
+        { date: "2024-01-03", startDate: "2024-01-02", value: 0.01 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.02 }
+      ], [
+        { date: "2024-01-03", startDate: "2024-01-02", value: 0.005 },
+        { date: "2024-01-04", startDate: "2024-01-03", value: 0.005 }
+      ]);
+      assertEqual(zeroVariance.available, false);
+      assertEqual(zeroVariance.value, null);
+      assert(zeroVariance.warnings.some((item) => item.code === "ANALYTICS_BENCHMARK_VARIANCE_INSUFFICIENT"));
+    });
+
+    test("Phase 6A maximum drawdown matches a known peak-to-trough path", () => {
+      const result = calculateMaximumDrawdown([
+        { date: "2024-01-02", value: 100 },
+        { date: "2024-01-03", value: 120 },
+        { date: "2024-01-04", value: 90 },
+        { date: "2024-01-05", value: 108 },
+        { date: "2024-01-08", value: 130 },
+        { date: "2024-01-09", value: 104 }
+      ], { sourceSeriesType: "price-return-performance-series" });
+      assert(result.available);
+      assertNear(result.maximumDrawdown, -0.25);
+      assertEqual(result.peakDate, "2024-01-03");
+      assertEqual(result.troughDate, "2024-01-04");
+      assertEqual(result.recoveryDate, "2024-01-08");
+      assertEqual(result.rawAccountValueUsed, false);
+      assertEqual(result.sourceSeriesType, "price-return-performance-series");
+    });
+
+    test("Phase 6A rejects raw-account-value headline drawdown", () => {
+      const result = calculateMaximumDrawdown([
+        { date: "2024-01-02", value: 100 },
+        { date: "2024-01-03", value: 80 },
+        { date: "2024-01-04", value: 180 }
+      ], { sourceSeriesType: "raw-account-value" });
+      assertEqual(result.available, false);
+      assertEqual(result.value, null);
+      assert(result.warnings.some((item) => item.code === "ANALYTICS_DRAWDOWN_RAW_ACCOUNT_VALUE_REJECTED"));
+    });
+
+    test("Phase 6A headline drawdown requires verified performance provenance", () => {
+      const untagged = calculateMaximumDrawdown([
+        { date: "2024-01-02", value: 100 },
+        { date: "2024-01-03", value: 80 },
+        { date: "2024-01-04", value: 180 }
+      ]);
+      assertEqual(untagged.available, false);
+      assertEqual(untagged.value, null);
+      assert(untagged.warnings.some(
+        (item) => item.code === "ANALYTICS_DRAWDOWN_PROVENANCE_REQUIRED"
+      ));
+    });
+
+    test("Phase 6A invalid, nonfinite, insufficient, and misaligned inputs stay unavailable", () => {
+      const cases = [
+        buildDailyArithmeticReturns([]),
+        buildDailyArithmeticReturns([{ date: "2024-01-02", close: 0 }, { date: "2024-01-03", close: 1 }]),
+        buildDailyLogReturns([{ date: "2024-01-02", close: -1 }, { date: "2024-01-03", close: 1 }]),
+        buildNormalizedPerformanceSeries([{ date: "2024-01-02", close: Infinity }]),
+        calculateCagr(0, 100, "2024-01-01", "2025-01-01"),
+        calculateCagr(100, NaN, "2024-01-01", "2025-01-01"),
+        alignSeriesByExactDate(
+          [{ date: "2024-01-02", value: 1 }],
+          [{ date: "2024-01-03", value: 1 }]
+        )
+      ];
+      cases.forEach((result) => {
+        assertEqual(result.available, false);
+        assertEqual(result.value, null);
+        assert(result.warnings.length > 0);
+        assertEqual(result.priceReturnApproximation, true);
+      });
+    });
+
+    test("Phase 6A stale sources remain calculated but visibly stale", () => {
+      const cagr = calculateCagr(100, 110, "2023-01-01", "2024-01-01", {
+        inputState: "stale",
+        warnings: [{ code: "HISTORICAL_DATASET_STALE", message: "Fixture is stale." }]
+      });
+      assert(cagr.available);
+      assertEqual(cagr.state, "stale");
+      assert(cagr.warnings.some((item) => item.code === "HISTORICAL_DATASET_STALE"));
+    });
+
+    test("Phase 6A Analytics Engine uses Historical Data Service and preserves lot flows", async () => {
+      let alignedCalls = 0;
+      let benchmarkCalls = 0;
+      const historicalDataService = {
+        async getAlignedSeries(symbols, options) {
+          alignedCalls += 1;
+          assertEqual(symbols.join(","), "AAA,BBB");
+          const allRows = [
+            { date: "2020-01-02", closes: { AAA: 10, BBB: 20 } },
+            { date: "2020-01-03", closes: { AAA: 11, BBB: 21 } },
+            { date: "2020-01-06", closes: { AAA: 12, BBB: 22 } },
+            { date: "2020-01-07", closes: { AAA: 13, BBB: 22 } }
+          ];
+          return {
+            available: true,
+            state: "current",
+            states: ["current"],
+            rows: allRows.filter((row) => (
+              (!options.startDate || row.date >= options.startDate)
+                && (!options.endDate || row.date <= options.endDate)
+            )),
+            counts: { returnedObservationCount: 4, returnObservationCount: 3 },
+            provenance: { AAA: { provider: "Stooq" }, BBB: { provider: "Stooq" } },
+            warnings: [],
+            serviceVersion: "fixture-historical-service"
+          };
+        },
+        async getSeries(symbol) {
+          benchmarkCalls += 1;
+          assertEqual(symbol, "SPY");
+          return {
+            symbol,
+            available: true,
+            state: "current",
+            candles: [
+              { date: "2020-01-02", close: 100 },
+              { date: "2020-01-03", close: 101 },
+              { date: "2020-01-06", close: 103 },
+              { date: "2020-01-07", close: 102 }
+            ],
+            warnings: [],
+            serviceVersion: "fixture-historical-service"
+          };
+        }
+      };
+      const riskFreeRateService = {
+        async getCurrentRate() {
+          return {
+            data: { rateDecimal: 0.04, instrument: "3-Month U.S. Treasury Bill" },
+            source: "U.S. Treasury Fiscal Data",
+            availability: "available",
+            stale: false,
+            retrievedAt: "2024-01-01T00:00:00.000Z",
+            provenance: { provider: "U.S. Treasury Fiscal Data" },
+            warnings: []
+          };
+        }
+      };
+      const engine = createAnalyticsEngine({ historicalDataService, riskFreeRateService });
+      const result = await engine.analyzePortfolio(historicalPortfolioInput(), {
+        benchmark: { ticker: "SPY", label: "S&P 500", active: true },
+        referenceDate
+      });
+      assertEqual(alignedCalls, 2);
+      assertEqual(benchmarkCalls, 1);
+      assert(result.available);
+      assertEqual(result.performanceSeries.counts.observationCount, 4);
+      assertEqual(result.counts.alignedObservationCount, 4);
+      assertEqual(result.counts.alignedReturnObservationCount, 3);
+      assertEqual(result.sourcePortfolioSeries.rows[2].activatedLotIds[0], "lot-aaa-2");
+      assertNear(result.sourcePortfolioSeries.rows[2].externalFlowMarketValue, 12);
+      assertEqual(result.portfolioMethodology.floatingMarketValueWeights, true);
+      assertEqual(result.portfolioMethodology.rebalancedDaily, false);
+      assertEqual(result.portfolioMethodology.contributionsTreatedAsExternalFlows, true);
+      assertEqual(result.drawdown.rawAccountValueUsed, false);
+      assertEqual(result.benchmark.ticker, "SPY");
+      assertEqual(result.riskFreeRateSource, "U.S. Treasury Fiscal Data");
+      assertEqual(result.label, PRICE_RETURN_APPROXIMATION_LABEL);
+      assertEqual(result.exactTotalReturn, false);
+      assertEqual(result.dividendReinvested, false);
+      assertEqual(result.monteCarloImplemented, false);
+    });
+
+    test("Phase 6A acquisition-aware history preserves performance before a later symbol", async () => {
+      const portfolio = {
+        id: "later-symbol-portfolio",
+        holdings: [
+          {
+            id: "holding-aaa",
+            ticker: "AAA",
+            active: true,
+            lots: [{ id: "lot-aaa", ticker: "AAA", shares: 1, purchasePricePerShare: 10, acquisitionDate: "2024-01-02" }]
+          },
+          {
+            id: "holding-bbb",
+            ticker: "BBB",
+            active: true,
+            lots: [{ id: "lot-bbb", ticker: "BBB", shares: 1, purchasePricePerShare: 20, acquisitionDate: "2024-01-04" }]
+          }
+        ]
+      };
+      const calls = [];
+      const closes = {
+        AAA: { "2024-01-02": 10, "2024-01-03": 11, "2024-01-04": 12, "2024-01-05": 13 },
+        BBB: { "2024-01-04": 20, "2024-01-05": 21 }
+      };
+      const service = {
+        async getAlignedSeries(symbols, options) {
+          calls.push(symbols.join(","));
+          const dates = Object.keys(closes[symbols[0]]).filter((date) => (
+            symbols.every((symbol) => Object.hasOwn(closes[symbol], date))
+              && (!options.startDate || date >= options.startDate)
+              && (!options.endDate || date <= options.endDate)
+          ));
+          return {
+            available: dates.length > 0,
+            state: "current",
+            states: ["current"],
+            rows: dates.map((date) => ({
+              date,
+              closes: Object.fromEntries(symbols.map((symbol) => [symbol, closes[symbol][date]]))
+            })),
+            counts: {}, provenance: {}, warnings: [], serviceVersion: "fixture"
+          };
+        }
+      };
+      const result = await buildAcquisitionAwarePerformanceSeries(portfolio, service, { referenceDate });
+      assert(result.available);
+      assertEqual(calls.join("|"), "AAA|AAA,BBB");
+      assertEqual(result.inceptionDate, "2024-01-02");
+      assertEqual(result.dateRange.firstDate, "2024-01-02");
+      assertEqual(result.dates.join(","), "2024-01-02,2024-01-03,2024-01-04,2024-01-05");
+      assertNear(result.rows[2].externalFlowMarketValue, 20);
+      assertNear(result.normalizedPriceReturnIndex[2], 120);
+      assertEqual(result.rows[2].activeLotCount, 2);
+      assertEqual(result.rebalanced, false);
+    });
+
+    test("Phase 6A invalid requested dates return unavailable without calling history", async () => {
+      let historicalCalls = 0;
+      const result = await buildAcquisitionAwarePerformanceSeries(
+        historicalPortfolioInput(),
+        {
+          async getAlignedSeries() {
+            historicalCalls += 1;
+            return null;
+          }
+        },
+        { startDate: "2024-02-30", referenceDate }
+      );
+      assertEqual(historicalCalls, 0);
+      assertEqual(result.available, false);
+      assertEqual(result.state, "unavailable");
+      assert(result.warnings.some((item) => item.code === "ANALYTICS_PORTFOLIO_RANGE_INVALID"));
+    });
+
+    test("Phase 6A alpha and beta exclude bridged missing-session intervals", async () => {
+      const portfolio = {
+        id: "interval-gap-portfolio",
+        benchmarks: [{ id: "benchmark-spy", ticker: "SPY", label: "SPY", active: true }],
+        holdings: [{
+          id: "holding-aaa",
+          ticker: "AAA",
+          active: true,
+          lots: [{ id: "lot-aaa", ticker: "AAA", shares: 1, purchasePricePerShare: 100, acquisitionDate: "2024-01-02" }]
+        }]
+      };
+      const portfolioRows = [
+        { date: "2024-01-02", closes: { AAA: 100 } },
+        { date: "2024-01-03", closes: { AAA: 101 } },
+        { date: "2024-01-04", closes: { AAA: 102 } },
+        { date: "2024-01-05", closes: { AAA: 104 } },
+        { date: "2024-01-08", closes: { AAA: 103 } }
+      ];
+      const historicalDataService = {
+        async getAlignedSeries() {
+          return {
+            available: true, state: "current", states: ["current"], rows: portfolioRows,
+            counts: {}, provenance: {}, warnings: [], serviceVersion: "fixture"
+          };
+        },
+        async getSeries() {
+          return {
+            available: true, state: "current",
+            candles: [
+              { date: "2024-01-02", close: 200 },
+              { date: "2024-01-04", close: 204 },
+              { date: "2024-01-08", close: 202 }
+            ], warnings: [], serviceVersion: "fixture"
+          };
+        }
+      };
+      const engine = createAnalyticsEngine({
+        historicalDataService,
+        riskFreeRateService: {
+          async getCurrentRate() {
+            return {
+              data: { rateDecimal: 0 }, source: "live", availability: "available", stale: false,
+              provenance: { provider: "U.S. Treasury Fiscal Data" }, warnings: []
+            };
+          }
+        }
+      });
+      const result = await engine.analyzePortfolio(portfolio, { benchmark: "SPY", referenceDate });
+      assert(result.benchmarkComparison.available);
+      assertEqual(result.dateAlignment.dates.join(","), "2024-01-02,2024-01-04,2024-01-08");
+      assertEqual(result.alpha.available, false);
+      assertEqual(result.beta.available, false);
+      assertEqual(result.alphaBeta.state, "misaligned");
+      assert(result.alphaBeta.warnings.some(
+        (item) => item.code === "ANALYTICS_RETURN_INTERVALS_MISALIGNED"
+          || item.code === "ANALYTICS_RETURN_INTERVALS_EXACT_INTERSECTION"
+      ));
+      assertEqual(
+        result.portfolioArithmeticReturns.rows.map((row) => `${row.startDate}/${row.endDate}`).join(","),
+        "2024-01-02/2024-01-03,2024-01-03/2024-01-04,2024-01-04/2024-01-05,2024-01-05/2024-01-08"
+      );
+    });
+
+    test("Phase 6A rejects an unconfigured or inactive benchmark selection", async () => {
+      const portfolio = {
+        id: "inactive-benchmark-portfolio",
+        benchmarks: [{ id: "benchmark-spy", ticker: "SPY", label: "SPY", active: false }],
+        holdings: [{
+          id: "holding-aaa", ticker: "AAA", active: true,
+          lots: [{ id: "lot-aaa", ticker: "AAA", shares: 1, purchasePricePerShare: 10, acquisitionDate: "2024-01-02" }]
+        }]
+      };
+      let benchmarkHistoryCalls = 0;
+      const engine = createAnalyticsEngine({
+        historicalDataService: {
+          async getAlignedSeries() {
+            return {
+              available: true, state: "current", states: ["current"],
+              rows: [
+                { date: "2024-01-02", closes: { AAA: 10 } },
+                { date: "2024-01-03", closes: { AAA: 11 } }
+              ], counts: {}, provenance: {}, warnings: [], serviceVersion: "fixture"
+            };
+          },
+          async getSeries() { benchmarkHistoryCalls += 1; return null; }
+        }
+      });
+      const result = await engine.analyzePortfolio(portfolio, { benchmark: "SPY", referenceDate });
+      assertEqual(benchmarkHistoryCalls, 0);
+      assertEqual(result.available, false);
+      assertEqual(result.coreAvailable, true);
+      assertEqual(result.benchmark, null);
+      assertEqual(result.alpha.available, false);
+      assert(result.warnings.some((item) => item.code === "ANALYTICS_BENCHMARK_NOT_CONFIGURED"));
+    });
+
+    test("Phase 6A contribution does not create a performance recovery", async () => {
+      const contributionPortfolio = {
+        id: "contribution-drawdown",
+        holdings: [{
+          id: "holding-aaa",
+          ticker: "AAA",
+          active: true,
+          lots: [
+            { id: "lot-initial", ticker: "AAA", shares: 10, purchasePricePerShare: 10, acquisitionDate: "2024-01-02" },
+            { id: "lot-contribution", ticker: "AAA", shares: 20, purchasePricePerShare: 8, acquisitionDate: "2024-01-04" }
+          ]
+        }]
+      };
+      const service = {
+        async getAlignedSeries(_symbols, options) {
+          const allRows = [
+            { date: "2024-01-02", closes: { AAA: 10 } },
+            { date: "2024-01-03", closes: { AAA: 8 } },
+            { date: "2024-01-04", closes: { AAA: 8 } }
+          ];
+          return {
+            available: true, state: "current", states: ["current"],
+            rows: allRows.filter((row) => (
+              (!options.startDate || row.date >= options.startDate)
+                && (!options.endDate || row.date <= options.endDate)
+            )),
+            counts: {}, provenance: {}, warnings: [], serviceVersion: "fixture"
+          };
+        }
+      };
+      const portfolioSeries = await buildHistoricalPerformanceSeries(
+        contributionPortfolio,
+        service,
+        { referenceDate }
+      );
+      assertNear(portfolioSeries.accountValues[0], 100);
+      assertNear(portfolioSeries.accountValues[1], 80);
+      assertNear(portfolioSeries.accountValues[2], 240);
+      assertNear(portfolioSeries.normalizedPriceReturnIndex[0], 100);
+      assertNear(portfolioSeries.normalizedPriceReturnIndex[1], 80);
+      assertNear(portfolioSeries.normalizedPriceReturnIndex[2], 80);
+      const headline = calculateMaximumDrawdown(portfolioSeries.rows, {
+        valueField: "normalizedPriceReturnIndex",
+        sourceSeriesType: "price-return-performance-series"
+      });
+      assertNear(headline.maximumDrawdown, -0.2);
+      assertEqual(headline.recoveryDate, null);
+      assertEqual(headline.contributionsNeutralized, true);
+    });
+
+    async function runTests() {
+      const resultsElement = document.querySelector("#results");
+      const summaryElement = document.querySelector("#summary");
+      resultsElement.replaceChildren();
+      let passed = 0;
+      for (const entry of tests) {
+        const item = document.createElement("li");
+        try {
+          await entry.fn();
+          passed += 1;
+          item.className = "pass";
+          item.textContent = `PASS: ${entry.name}`;
+        } catch (error) {
+          item.className = "fail";
+          const title = document.createElement("strong");
+          title.textContent = `FAIL: ${entry.name}`;
+          const details = document.createElement("pre");
+          details.textContent = error && error.stack ? error.stack : String(error);
+          item.append(title, details);
+        }
+        resultsElement.append(item);
+      }
+      const failed = tests.length - passed;
+      summaryElement.className = `summary ${failed === 0 ? "pass" : "fail"}`;
+      summaryElement.textContent = `${passed} passed, ${failed} failed, ${tests.length} total.`;
+      document.title = failed === 0
+        ? `PASS (${passed}) - Phase 3A, 4A, and 6A Tests`
+        : `FAIL (${failed}) - Phase 3A, 4A, and 6A Tests`;
+      if (new URLSearchParams(location.search).has("report")) {
+        fetch("/__baseline_results", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ suite: "phase-3a-4a-6a-calculation", passed, failed, total: tests.length })
+        }).catch(() => {});
+      }
+    }
+
+    document.querySelector("#run-tests").addEventListener("click", runTests);
+    runTests();
+  </script>
+</body>
+</html>

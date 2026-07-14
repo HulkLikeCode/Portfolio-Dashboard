@@ -1,0 +1,80 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-page-bg: #e8edf3;
+  --color-surface: #f9fbfd;
+  --color-surface-muted: #edf2f7;
+  --color-nav-bg: rgba(249, 251, 253, 0.96);
+  --color-text: #111827;
+  --color-text-muted: #3f4d60;
+  --color-heading: #050b14;
+  --color-border: #a9b6c5;
+  --color-border-strong: #65758b;
+  --color-accent: #075bbf;
+  --color-accent-hover: #064a9b;
+  --color-button-text: #ffffff;
+  --color-link: #064fa8;
+  --color-link-hover: #043b7e;
+  --color-focus: #d97706;
+  --color-warning-bg: #fff1bf;
+  --color-warning-border: #b45309;
+  --color-warning-text: #6b2d08;
+  --color-danger-bg: #ffe0e0;
+  --color-danger-border: #b91c1c;
+  --color-danger-text: #861414;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page-bg: #050a11;
+  --color-surface: #0b1320;
+  --color-surface-muted: #111d2c;
+  --color-nav-bg: rgba(8, 15, 25, 0.96);
+  --color-text: #e8eef7;
+  --color-text-muted: #a9b6c8;
+  --color-heading: #ffffff;
+  --color-border: #3d4e64;
+  --color-border-strong: #71839a;
+  --color-accent: #38bdf8;
+  --color-accent-hover: #0ea5e9;
+  --color-button-text: #02131d;
+  --color-link: #67d2ff;
+  --color-link-hover: #a5e5ff;
+  --color-focus: #fbbf24;
+  --color-warning-bg: #3b2708;
+  --color-warning-border: #f59e0b;
+  --color-warning-text: #ffe39a;
+  --color-danger-bg: #3d1117;
+  --color-danger-border: #ef4444;
+  --color-danger-text: #ffc1c1;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-page-bg: #050a11;
+    --color-surface: #0b1320;
+    --color-surface-muted: #111d2c;
+    --color-nav-bg: rgba(8, 15, 25, 0.96);
+    --color-text: #e8eef7;
+    --color-text-muted: #a9b6c8;
+    --color-heading: #ffffff;
+    --color-border: #3d4e64;
+    --color-border-strong: #71839a;
+    --color-accent: #38bdf8;
+    --color-accent-hover: #0ea5e9;
+    --color-button-text: #02131d;
+    --color-link: #67d2ff;
+    --color-link-hover: #a5e5ff;
+    --color-focus: #fbbf24;
+    --color-warning-bg: #3b2708;
+    --color-warning-border: #f59e0b;
+    --color-warning-text: #ffe39a;
+    --color-danger-bg: #3d1117;
+    --color-danger-border: #ef4444;
+    --color-danger-text: #ffc1c1;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.55);
+  }
+}

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7A Monte Carlo Worker Tests</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { max-width: 900px; margin: 0 auto; padding: 1.25rem; line-height: 1.45; }
+    button { min-height: 44px; font: inherit; padding: .6rem .9rem; }
+    .summary { margin: 1rem 0; padding: .85rem; border: 1px solid currentColor; border-radius: .35rem; }
+    .pass { color: #16723a; } .fail { color: #b42318; } li { margin: .5rem 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Phase 7A Monte Carlo Worker Tests</h1>
+    <p>Deterministic protocol, validation, cancellation, stale-run, and worker-unavailable tests. No simulation method is exercised here.</p>
+    <button id="run-tests" type="button">Run tests</button>
+    <div id="summary" class="summary" aria-live="polite">Tests have not run.</div>
+    <ol id="results"></ol>
+  </main>
+  <script type="module">
+    import { DEFAULT_PATH_COUNT, SUPPORTED_PATH_COUNTS, validateMonteCarloInputs } from "../js/monte-carlo/mc-inputs.js";
+    import { MONTE_CARLO_STATES, canTransitionMonteCarloState, createMonteCarloState, transitionMonteCarloState } from "../js/monte-carlo/mc-state.js";
+    import { MonteCarloController } from "../js/monte-carlo/mc-controller.js";
+    import { MONTE_CARLO_PROTOCOL_VERSION, WORKER_TO_MAIN, createErrorMessage, createProgressMessage, createResultMessage, validateMainToWorkerMessage, validateWorkerToMainMessage } from "../js/workers/worker-protocol.js";
+
+    const tests = [];
+    const test = (name, fn) => tests.push({ name, fn });
+    const assert = (value, message = "Assertion failed") => { if (!value) throw new Error(message); };
+    const equal = (actual, expected, message = "Values differ") => { if (actual !== expected) throw new Error(`${message}: expected ${expected}, got ${actual}`); };
+    const inputs = (changes = {}) => ({
+      includedSymbols: [{ symbol: "AAA", initialValue: 100 }, { ticker: "BBB", initialValue: 250 }],
+      pathCount: 5000,
+      horizonYears: 5,
+      lookbackReturns: 756,
+      seedMode: "fixed",
+      seed: 42,
+      ...changes
+    });
+    const infrastructureResult = (changes = {}) => ({
+      kind: "infrastructure-ready",
+      pathCount: 5000,
+      horizonYears: 5,
+      seed: 42,
+      ...changes
+    });
+
+    class FakeWorker {
+      constructor() { this.sent = []; this.terminated = false; this.onmessage = null; this.onerror = null; this.onmessageerror = null; }
+      postMessage(message) { this.sent.push(message); }
+      terminate() { this.terminated = true; }
+      emit(message) { this.onmessage?.({ data: message }); }
+    }
+
+    test("Input defaults select 5,000 paths", () => {
+      equal(DEFAULT_PATH_COUNT, 5000);
+      equal(validateMonteCarloInputs({ ...inputs(), pathCount: undefined }).value.pathCount, 5000);
+      equal(SUPPORTED_PATH_COUNTS.join(","), "1000,2500,5000");
+    });
+    test("Input validation preserves selected supported path counts", () => {
+      for (const pathCount of SUPPORTED_PATH_COUNTS) equal(validateMonteCarloInputs(inputs({ pathCount })).value.pathCount, pathCount);
+      const invalid = validateMonteCarloInputs(inputs({ pathCount: 3000 }));
+      assert(!invalid.valid && invalid.errors.some((entry) => entry.code === "UNSUPPORTED_PATH_COUNT"));
+    });
+    test("Input validation rejects empty symbols, invalid horizon, lookback, value, and fixed seed", () => {
+      const result = validateMonteCarloInputs(inputs({ includedSymbols: [], horizonYears: 11, lookbackReturns: 757, seed: -1 }));
+      assert(!result.valid);
+      assert(result.errors.length >= 4);
+    });
+    test("Random seed mode generates a uint32 seed", () => {
+      const result = validateMonteCarloInputs(inputs({ seedMode: "random", seed: undefined }), { randomSeed: () => 0.5 });
+      assert(result.valid && Number.isInteger(result.value.seed) && result.value.seed >= 0);
+    });
+    test("Protocol rejects malformed messages in both directions", () => {
+      assert(!validateMainToWorkerMessage({ protocol: MONTE_CARLO_PROTOCOL_VERSION, type: "mc:start", runId: "bad", inputs: {} }).valid);
+      assert(!validateWorkerToMainMessage({ protocol: MONTE_CARLO_PROTOCOL_VERSION, type: WORKER_TO_MAIN.PROGRESS, runId: "run", completedPaths: 6, totalPaths: 5 }).valid);
+    });
+    test("Protocol accepts complete typed progress and infrastructure result messages", () => {
+      assert(validateWorkerToMainMessage(createProgressMessage("run_1", 5, 10)).valid);
+      assert(validateWorkerToMainMessage(createResultMessage("run_1", infrastructureResult())).valid);
+    });
+    test("Protocol rejects incomplete results and normalizes malformed error envelopes", () => {
+      assert(!validateWorkerToMainMessage(createResultMessage("run_1", { kind: "infrastructure-ready" })).valid);
+      const error = createErrorMessage("x".repeat(81), "", "");
+      assert(validateWorkerToMainMessage(error).valid);
+      equal(error.runId, "invalid");
+    });
+    test("State transitions are explicit and illegal transitions throw", () => {
+      assert(canTransitionMonteCarloState(MONTE_CARLO_STATES.RUNNING, MONTE_CARLO_STATES.STALE));
+      let failed = false;
+      try { transitionMonteCarloState(createMonteCarloState(), MONTE_CARLO_STATES.COMPLETED); } catch (error) { failed = error.code === "MONTE_CARLO_ILLEGAL_STATE_TRANSITION"; }
+      assert(failed);
+    });
+    test("Controller sends work to a worker and reports elapsed progress without ETA", () => {
+      let worker; let now = 100;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => now });
+      const start = controller.start(inputs());
+      assert(start.accepted);
+      equal(controller.getState().status, MONTE_CARLO_STATES.QUEUED);
+      equal(worker.sent[0].type, "mc:start");
+      now = 160;
+      worker.emit(createProgressMessage(start.runId, 2500, 5000));
+      equal(controller.getState().status, MONTE_CARLO_STATES.RUNNING);
+      equal(controller.getState().progress, .5);
+      equal(controller.getState().elapsedMs, 60);
+      assert(!Object.hasOwn(controller.getState(), "etaMs"));
+    });
+    test("Cancellation works from queued state and terminates the worker safely", () => {
+      let worker;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      const start = controller.start(inputs());
+      equal(controller.getState().status, MONTE_CARLO_STATES.QUEUED);
+      assert(controller.cancel());
+      worker.emit({ protocol: MONTE_CARLO_PROTOCOL_VERSION, type: WORKER_TO_MAIN.CANCELLED, runId: start.runId });
+      equal(controller.getState().status, MONTE_CARLO_STATES.CANCELLED);
+      assert(worker.terminated);
+    });
+    test("Cancellation works after the worker is running", () => {
+      let worker;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      const start = controller.start(inputs());
+      worker.emit(createProgressMessage(start.runId, 1000, 5000));
+      assert(controller.cancel());
+      worker.emit({ protocol: MONTE_CARLO_PROTOCOL_VERSION, type: WORKER_TO_MAIN.CANCELLED, runId: start.runId });
+      equal(controller.getState().status, MONTE_CARLO_STATES.CANCELLED);
+      assert(worker.terminated);
+    });
+    test("Changed inputs make the active run stale and a late result is ignored", () => {
+      let worker; const events = [];
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), diagnostics: (event) => events.push(event), now: () => 100 });
+      const start = controller.start(inputs());
+      assert(controller.markInputsChanged(inputs({ horizonYears: 6 })));
+      worker.emit(createResultMessage(start.runId, infrastructureResult()));
+      equal(controller.getState().status, MONTE_CARLO_STATES.STALE);
+      assert(events.some((event) => event.status === "stale-result-ignored"));
+    });
+    test("Unchanged random-mode inputs do not make an active run stale", () => {
+      let worker;
+      const randomInputs = inputs({ seedMode: "random", seed: undefined });
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      controller.start(randomInputs);
+      assert(!controller.markInputsChanged(randomInputs));
+      equal(controller.getState().status, MONTE_CARLO_STATES.QUEUED);
+      assert(!worker.terminated);
+    });
+    test("A result path-count mismatch fails instead of silently reducing work", () => {
+      let worker;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      const start = controller.start(inputs());
+      worker.emit(createResultMessage(start.runId, infrastructureResult({ pathCount: 2500 })));
+      equal(controller.getState().status, MONTE_CARLO_STATES.FAILED);
+      equal(controller.getState().error.code, "RESULT_PATH_COUNT_MISMATCH");
+      assert(worker.terminated);
+    });
+    test("A superseded late result cannot replace the newer result", () => {
+      const workers = [];
+      const controller = new MonteCarloController({ workerFactory: () => { const worker = new FakeWorker(); workers.push(worker); return worker; }, now: () => 100 });
+      const first = controller.start(inputs());
+      const second = controller.start(inputs({ pathCount: 2500 }));
+      workers[0].emit(createResultMessage(first.runId, infrastructureResult()));
+      workers[1].emit(createResultMessage(second.runId, infrastructureResult({ pathCount: 2500 })));
+      equal(controller.getState().status, MONTE_CARLO_STATES.COMPLETED);
+      equal(controller.getState().result.pathCount, 2500);
+    });
+    test("Throwing state listeners cannot prevent worker cleanup", () => {
+      let worker;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      controller.subscribe((state) => { if (state.status === MONTE_CARLO_STATES.COMPLETED) throw new Error("observer failed"); });
+      const start = controller.start(inputs());
+      worker.emit(createResultMessage(start.runId, infrastructureResult()));
+      equal(controller.getState().status, MONTE_CARLO_STATES.COMPLETED);
+      assert(worker.terminated);
+    });
+    test("Dispose cancels an active run, terminates its worker, and prevents reuse", () => {
+      let worker;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      controller.start(inputs());
+      controller.dispose();
+      equal(controller.getState().status, MONTE_CARLO_STATES.CANCELLED);
+      equal(controller.getState().reason, "disposed");
+      assert(worker.terminated);
+      assert(!controller.start(inputs()).accepted);
+    });
+    test("No Worker support produces an explicit unavailable state", () => {
+      const controller = new MonteCarloController({ WorkerCtor: null });
+      equal(controller.getState().status, MONTE_CARLO_STATES.UNAVAILABLE);
+      equal(controller.start(inputs()).accepted, false);
+      equal(controller.getState().status, MONTE_CARLO_STATES.UNAVAILABLE);
+    });
+
+    async function run() {
+      const output = document.querySelector("#results"); output.replaceChildren();
+      let passed = 0;
+      for (const entry of tests) {
+        const item = document.createElement("li");
+        try { await entry.fn(); item.className = "pass"; item.textContent = `PASS: ${entry.name}`; passed += 1; }
+        catch (error) { item.className = "fail"; item.textContent = `FAIL: ${entry.name} — ${error.message}`; }
+        output.append(item);
+      }
+      const summary = document.querySelector("#summary");
+      summary.textContent = `${passed}/${tests.length} tests passed.`;
+      summary.className = `summary ${passed === tests.length ? "pass" : "fail"}`;
+    }
+    document.querySelector("#run-tests").addEventListener("click", run);
+  </script>
+</body>
+</html>
