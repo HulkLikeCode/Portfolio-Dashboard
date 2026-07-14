@@ -36,8 +36,8 @@
 | Active project root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard/MVP-Portfolio-Dash-5A-Validated` |
 | Accepted source baseline | Phase 5A, squash merge `b30cc30`, tag `phase-5a-accepted` |
 | Mandatory migration | Runtime-only Finnhub credential exclusion and GitHub Pages hosting |
-| Active gate | Phase 6A acceptance and release |
-| Next phase | Phase 7A after Phase 6A acceptance |
+| Active gate | Phase 7A Monte Carlo Worker Infrastructure |
+| Next phase | Phase 7A implementation from the accepted Phase 6A contracts |
 | Deployment infrastructure | Phase 1D GitHub Pages HTTPS and iPhone installation |
 | Public runtime deployment | Required through GitHub Pages |
 | Application backend | Excluded; optional cloud synchronization remains in scope |
@@ -175,15 +175,15 @@ GitHub stores public source, documentation, committed Stooq files, credential-fr
 | Phase 3B | Accepted | Portfolio UI and corporate-action workflow preserved |
 | Phase 4A | Accepted | Benchmark and active-symbol management preserved |
 | Phase 5A | Accepted | Chart Manager preserved with tag `phase-5a-accepted`; physical iPhone and Home Screen validation remains deferred to the Phase 1D/10A final device gates |
-| Phase 6A | Implemented and locally validated | Complete pull-request review, merge, and accepted-tag release without adding new features |
+| Phase 6A | Accepted | Analytics Engine preserved with squash merge `a557803` and tag `phase-6a-accepted` |
 
 ## 2.1 Immediate action
 
 1. Open `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard` as the VS Code workspace and select `MVP-Portfolio-Dash-5A-Validated` as the active project root.
 2. Verify `main` contains squash merge `b30cc30`, the accepted tag is `phase-5a-accepted`, and `origin` is `git@github.com:KCs-IRA-Dash-Monte-Carlo/Portfolio-Dashboard.git`.
-3. Complete the `phase-6a` pull-request review, merge, and `phase-6a-accepted` tag from the locally validated implementation.
-4. Preserve the Phase 6A allowed-file boundary; do not add features during acceptance work.
-5. Do not begin Phase 7A or any Monte Carlo implementation until Phase 6A is accepted and tagged.
+3. Start Phase 7A only from the accepted Phase 6A contracts and tag `phase-6a-accepted`.
+4. Preserve the Phase 6A analytics boundary; Phase 7A must consume its aligned-return utilities rather than duplicate them.
+5. Do not alter accepted Phase 6A work without a new repair branch and review.
 
 ## 2.2 Phase 3B boundary
 
@@ -2636,7 +2636,7 @@ calculations to the accepted shared visual infrastructure.
 
 
 # Phase 6A - Analytics Engine
-**Status:** Implemented and locally validated on `phase-6a`; pending pull-request merge and `phase-6a-accepted` tag.
+**Status:** Accepted through squash merge `a557803` and tag `phase-6a-accepted`.
 
 ## Purpose
 

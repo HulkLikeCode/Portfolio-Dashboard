@@ -5,11 +5,13 @@
 - Phase: 6A - Analytics Engine
 - Validation date: 2026-07-14
 - Source branch: `phase-6a`
+- Squash merge on `main`: `a557803`
+- Accepted tag: `phase-6a-accepted`
 - Accepted baseline: Phase 5A squash merge `b30cc30`, tag `phase-5a-accepted`
 - Tracked source working folder: `MVP-Portfolio-Dash-4A-Validated`
 - Local repaired snapshot used for reconciliation: `MVP-Portfolio-Dash-5A-Validated`
-- Acceptance state: locally validated; GitHub pull-request merge and
-  `phase-6a-accepted` tag remain pending.
+- Acceptance state: accepted after GitHub pull-request review, squash merge,
+  and accepted tag.
 
 ## Implementation boundary
 

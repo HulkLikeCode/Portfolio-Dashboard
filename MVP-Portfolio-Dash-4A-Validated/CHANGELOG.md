@@ -19,8 +19,8 @@ All notable project specification and repository-workflow changes are recorded h
   historical data 38/38, Phase 2F Node 19/19, Phase 3B and security regressions,
   plus analytics syntax/import checks.
 - No Monte Carlo, direct historical network request, Finnhub candle dependency,
-  or replacement project ZIP was added. Pull-request merge and accepted tag are
-  pending.
+  or replacement project ZIP was added. Accepted through squash merge `a557803`
+  and tag `phase-6a-accepted`.
 
 ## [2.3-phase-5a] - 2026-07-14
 
