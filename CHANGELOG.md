@@ -1,6 +1,6 @@
 # Changelog
 
-All notable project specification and repository-workflow changes are recorded here.
+All notable project specification and repository-workflow changes are recorded here. Yeah right, you know I didn't get that correct to start.
 
 ## [2.3-phase-6a] - 2026-07-14
 
