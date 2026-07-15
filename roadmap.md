@@ -23,9 +23,7 @@
 | Requirements version | 2.3 |
 | Effective date | 2026-07-12 |
 | Working-environment revision | 2026-07-14 |
-| Supersedes | Version 2.2 Consolidated in full |
-| GitHub organization display name | `KCs IRA Dash - Monte Carlo` |
-| GitHub organization login | `KCs-IRA-Dash-Monte-Carlo` |
+| Supersedes | Version 2.2 Consolidated in full homie.
 | GitHub repository | `Portfolio-Dashboard` |
 | SSH remote | `git@github.com:KCs-IRA-Dash-Monte-Carlo/Portfolio-Dashboard.git` |
 | VS Code | Version 1.106.3, commit `bf9252a2fb45be6893dd8870c0bf37e2e1766d61` |
