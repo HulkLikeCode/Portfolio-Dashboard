@@ -26,16 +26,14 @@
 | Supersedes | Version 2.2 Consolidated in full homie.
 | GitHub repository | `Portfolio-Dashboard` |
 | SSH remote | `git@github.com:KCs-IRA-Dash-Monte-Carlo/Portfolio-Dashboard.git` |
+ GitHub HTTPS Link: https://github.com/HulkLikeCode/Portfolio-Dashboard.git
 | VS Code | Version 1.106.3, commit `bf9252a2fb45be6893dd8870c0bf37e2e1766d61` |
 | Codex | VS Code extension connected to the owner's ChatGPT Plus subscription |
 | Editor runtime | Electron 37.7.0; Chromium 138.0.7204.251; Node.js 22.20.0; V8 13.8.258.32-electron.0 |
 | Development OS | Darwin x64 20.6.0 |
 | VS Code workspace and Git root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard` |
-| Active project root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard/MVP-Portfolio-Dash-5A-Validated` |
-| Accepted source baseline | Phase 5A, squash merge `b30cc30`, tag `phase-5a-accepted` |
+| Active project root | `/Users/nicholasoconnell/Desktop/Portfolio-Dashboard` |
 | Mandatory migration | Runtime-only Finnhub credential exclusion and GitHub Pages hosting |
-| Active gate | Phase 7A Monte Carlo Worker Infrastructure |
-| Next phase | Phase 7A implementation from the accepted Phase 6A contracts |
 | Deployment infrastructure | Phase 1D GitHub Pages HTTPS and iPhone installation |
 | Public runtime deployment | Required through GitHub Pages |
 | Application backend | Excluded; optional cloud synchronization remains in scope |

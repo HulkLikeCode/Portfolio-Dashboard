@@ -14,8 +14,8 @@ export const WORKER_TO_MAIN = Object.freeze({
   ERROR: "mc:error"
 });
 
-export function createStartMessage(runId, inputs) {
-  return { protocol: MONTE_CARLO_PROTOCOL_VERSION, type: MAIN_TO_WORKER.START, runId, inputs };
+export function createStartMessage(runId, inputs, alignedHistory) {
+  return { protocol: MONTE_CARLO_PROTOCOL_VERSION, type: MAIN_TO_WORKER.START, runId, inputs, alignedHistory };
 }
 
 export function createCancelMessage(runId) {

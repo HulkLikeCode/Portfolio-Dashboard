@@ -57,7 +57,7 @@ export class MonteCarloController {
     return () => this.listeners.delete(listener);
   }
 
-  start(rawInputs) {
+  start(rawInputs, alignedHistory) {
     if (this.disposed) {
       return {
         accepted: false,
@@ -91,6 +91,8 @@ export class MonteCarloController {
       runId,
       inputs,
       inputFingerprint: fingerprintMonteCarloInputs(inputs),
+      historyFingerprint: fingerprintAlignedHistory(alignedHistory),
+      alignedHistory,
       startedAt,
       stale: false
     };
@@ -107,7 +109,7 @@ export class MonteCarloController {
 
     try {
       this.createWorker();
-      this.worker.postMessage(createStartMessage(runId, inputs));
+      this.worker.postMessage(createStartMessage(runId, inputs, alignedHistory));
       this.record("started", runMetadata(this.currentRun, 0));
       return { accepted: true, runId, state: this.state, errors: [] };
     } catch (error) {
@@ -136,13 +138,15 @@ export class MonteCarloController {
   }
 
   /** Marks the current run stale when a relevant input snapshot differs. */
-  markInputsChanged(rawInputs) {
+  markInputsChanged(rawInputs, alignedHistory) {
     const run = this.currentRun;
     if (!run || !isActiveMonteCarloState(this.state.status)) return false;
     const nextFingerprint = fingerprintMonteCarloInputs(rawInputs, {
       randomSeedOverride: run.inputs.seed
     });
-    if (nextFingerprint !== null && nextFingerprint === run.inputFingerprint) return false;
+    const nextHistoryFingerprint = fingerprintAlignedHistory(alignedHistory);
+    if (nextFingerprint !== null && nextFingerprint === run.inputFingerprint
+      && nextHistoryFingerprint === run.historyFingerprint) return false;
     run.stale = true;
     this.setState(MONTE_CARLO_STATES.STALE, {
       elapsedMs: this.elapsedFor(run),
@@ -371,6 +375,11 @@ function normalizeDiagnostics(value) {
   if (!value) return null;
   if (typeof value === "function") return { record: value };
   return typeof value.record === "function" ? value : null;
+}
+
+function fingerprintAlignedHistory(alignedHistory) {
+  if (alignedHistory === undefined) return null;
+  try { return JSON.stringify(alignedHistory); } catch (_error) { return "[unserializable-history]"; }
 }
 
 function runMetadata(run, elapsedMs = null) {

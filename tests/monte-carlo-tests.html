@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Phase 7B GBM Monte Carlo Tests</title>
-  <title>Phase 7A Monte Carlo Worker Tests</title>
+  <title>Phase 7C Historical Bootstrap Monte Carlo Tests</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { max-width: 900px; margin: 0 auto; padding: 1.25rem; line-height: 1.45; }
@@ -15,10 +14,8 @@
 </head>
 <body>
   <main>
-    <h1>Phase 7B GBM Monte Carlo Tests</h1>
-    <p>Deterministic worker/protocol and GBM estimation, correlation, seed, percentile, and failure-state tests.</p>
-    <h1>Phase 7A Monte Carlo Worker Tests</h1>
-    <p>Deterministic protocol, validation, cancellation, stale-run, and worker-unavailable tests. No simulation method is exercised here.</p>
+    <h1>Phase 7C Historical Bootstrap Monte Carlo Tests</h1>
+    <p>Deterministic protocol, worker lifecycle, GBM regression, and historical-bootstrap vector resampling tests.</p>
     <button id="run-tests" type="button">Run tests</button>
     <div id="summary" class="summary" aria-live="polite">Tests have not run.</div>
     <ol id="results"></ol>
@@ -27,10 +24,11 @@
     import { DEFAULT_PATH_COUNT, SUPPORTED_PATH_COUNTS, validateMonteCarloInputs } from "../js/monte-carlo/mc-inputs.js";
     import { MONTE_CARLO_STATES, canTransitionMonteCarloState, createMonteCarloState, transitionMonteCarloState } from "../js/monte-carlo/mc-state.js";
     import { MonteCarloController } from "../js/monte-carlo/mc-controller.js";
-    import { MONTE_CARLO_PROTOCOL_VERSION, WORKER_TO_MAIN, createErrorMessage, createProgressMessage, createResultMessage, validateMainToWorkerMessage, validateWorkerToMainMessage } from "../js/workers/worker-protocol.js";
+    import { MONTE_CARLO_PROTOCOL_VERSION, WORKER_TO_MAIN, createErrorMessage, createProgressMessage, createResultMessage, createStartMessage, validateMainToWorkerMessage, validateWorkerToMainMessage } from "../js/workers/worker-protocol.js";
     import { factorCovariance } from "../js/monte-carlo/covariance.js";
     import { ALIGNED_HISTORY_SOURCE, deriveAlignedLogReturns, runGbmSimulation } from "../js/monte-carlo/gbm.js";
     import { estimateLogReturnStatistics, percentile } from "../js/monte-carlo/statistics.js";
+    import { deriveAlignedArithmeticReturnVectors, prepareBootstrapRun, runBootstrapSimulation, simulateBootstrapPath } from "../js/monte-carlo/bootstrap.js";
 
     const tests = [];
     const test = (name, fn) => tests.push({ name, fn });
@@ -122,6 +120,43 @@
       assert(first.p10 <= first.p50 && first.p50 <= first.p90);
       equal(first.confidenceFan.length, 253); equal(first.percentileBands.length, 253);
     });
+    test("Bootstrap retains symbol order, dates, and no more than 756 aligned arithmetic return vectors", () => {
+      const closes = {
+        AAA: Array.from({ length: 800 }, (_, index) => 100 + index),
+        BBB: Array.from({ length: 800 }, (_, index) => 200 + index * 2)
+      };
+      const derived = deriveAlignedArithmeticReturnVectors(gbmInputs().includedSymbols, datedHistory(closes), 756);
+      equal(derived.observationCount, 756); equal(derived.closeObservationCount, 757);
+      equal(derived.dates.length, 756); equal(derived.dates[0], datedHistory(closes).dates[44]);
+      nearly(derived.vectors[0][0], 1 / 143); nearly(derived.vectors[0][1], 2 / 286);
+    });
+    test("Bootstrap samples complete same-day vectors rather than independently resampled assets", () => {
+      // The selected index 0 has [+10%, +20%]. Selecting each asset separately
+      // could instead produce a mixed pair when the alternate vector is sampled.
+      const history = datedHistory({ AAA: [100, 110, 99], BBB: [200, 240, 192] });
+      const run = prepareBootstrapRun(gbmInputs({ pathCount: 1000, horizonYears: 1, seed: 7 }), history);
+      run.random = { next: () => 0 };
+      simulateBootstrapPath(run, 0);
+      const expected = 100 * (1.1 ** 252) + 200 * (1.2 ** 252);
+      nearly(run.endingValues[0], expected, expected * 1e-12);
+      const derived = deriveAlignedArithmeticReturnVectors(gbmInputs().includedSymbols, history, 756);
+      assert(nearlyVector(derived.vectors[0], [.1, .2]));
+    });
+    test("Fixed-seed Bootstrap output is exactly reproducible and returns all required distribution data", () => {
+      const first = runBootstrapSimulation(gbmInputs(), fixtureHistory());
+      const second = runBootstrapSimulation(gbmInputs(), fixtureHistory());
+      equal(JSON.stringify(first), JSON.stringify(second));
+      equal(first.method, "historical-bootstrap"); equal(first.endingValueDistribution.count, 1000);
+      equal(first.confidenceFan.length, 253); equal(first.percentileBands.length, 253);
+      assert(first.p10 <= first.p50 && first.p50 <= first.p90);
+      nearly(first.valueAtRisk, Math.max(0, first.initialValue - first.p10));
+    });
+    test("Bootstrap visibly rejects insufficient, nonfinite, and -100% return histories", () => {
+      let insufficient = false; try { runBootstrapSimulation(gbmInputs(), datedHistory({ AAA: [100, 101], BBB: [200, 201] })); } catch (error) { insufficient = error.code === "INSUFFICIENT_HISTORY"; }
+      let nonfinite = false; try { runBootstrapSimulation(gbmInputs(), datedHistory({ AAA: [100, NaN, 102], BBB: [200, 202, 204] })); } catch (error) { nonfinite = error.code === "INVALID_CLOSE_HISTORY"; }
+      let loss = false; try { deriveAlignedArithmeticReturnVectors(gbmInputs().includedSymbols, { ...datedHistory({ AAA: [100, 0, 1], BBB: [200, 100, 101] }), closes: { AAA: [100, 0, 1], BBB: [200, 100, 101] } }); } catch (error) { loss = error.code === "INVALID_CLOSE_HISTORY" || error.code === "RETURN_AT_OR_BELOW_MINUS_100_PERCENT"; }
+      assert(insufficient && nonfinite && loss);
+    });
     test("Percentiles and VaR use the lower ten-percent portfolio outcome", () => {
       nearly(percentile([0, 10, 20, 30, 40], .5), 20);
       nearly(percentile([0, 10, 20, 30, 40], .1), 4);
@@ -144,6 +179,12 @@
     test("Protocol accepts complete typed progress and infrastructure result messages", () => {
       assert(validateWorkerToMainMessage(createProgressMessage("run_1", 5, 10)).valid);
       assert(validateWorkerToMainMessage(createResultMessage("run_1", infrastructureResult())).valid);
+    });
+    test("Start payload carries aligned history to the worker boundary", () => {
+      const history = fixtureHistory();
+      const message = createStartMessage("run_1", inputs(), history);
+      assert(validateMainToWorkerMessage(message).valid);
+      equal(message.alignedHistory, history);
     });
     test("Protocol rejects incomplete results and normalizes malformed error envelopes", () => {
       assert(!validateWorkerToMainMessage(createResultMessage("run_1", { kind: "infrastructure-ready" })).valid);
@@ -170,6 +211,16 @@
       equal(controller.getState().progress, .5);
       equal(controller.getState().elapsedMs, 60);
       assert(!Object.hasOwn(controller.getState(), "etaMs"));
+    });
+    test("Controller forwards aligned history and marks history changes stale", () => {
+      let worker;
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), now: () => 100 });
+      const history = fixtureHistory();
+      const start = controller.start(inputs(), history);
+      equal(worker.sent[0].alignedHistory, history);
+      assert(controller.markInputsChanged(inputs(), { ...history, dates: [...history.dates, "2023-01-07"] }));
+      equal(controller.getState().status, MONTE_CARLO_STATES.STALE);
+      equal(start.accepted, true);
     });
     test("Cancellation works from queued state and terminates the worker safely", () => {
       let worker;
@@ -276,6 +327,9 @@
       const summary = document.querySelector("#summary");
       summary.textContent = `${passed}/${tests.length} tests passed.`;
       summary.className = `summary ${passed === tests.length ? "pass" : "fail"}`;
+    }
+    function nearlyVector(actual, expected, tolerance = 1e-12) {
+      return actual.length === expected.length && actual.every((value, index) => Math.abs(value - expected[index]) <= tolerance);
     }
     document.querySelector("#run-tests").addEventListener("click", run);
   </script>
