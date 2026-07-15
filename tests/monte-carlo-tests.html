@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7B GBM Monte Carlo Tests</title>
   <title>Phase 7A Monte Carlo Worker Tests</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
@@ -14,6 +15,8 @@
 </head>
 <body>
   <main>
+    <h1>Phase 7B GBM Monte Carlo Tests</h1>
+    <p>Deterministic worker/protocol and GBM estimation, correlation, seed, percentile, and failure-state tests.</p>
     <h1>Phase 7A Monte Carlo Worker Tests</h1>
     <p>Deterministic protocol, validation, cancellation, stale-run, and worker-unavailable tests. No simulation method is exercised here.</p>
     <button id="run-tests" type="button">Run tests</button>
@@ -25,6 +28,9 @@
     import { MONTE_CARLO_STATES, canTransitionMonteCarloState, createMonteCarloState, transitionMonteCarloState } from "../js/monte-carlo/mc-state.js";
     import { MonteCarloController } from "../js/monte-carlo/mc-controller.js";
     import { MONTE_CARLO_PROTOCOL_VERSION, WORKER_TO_MAIN, createErrorMessage, createProgressMessage, createResultMessage, validateMainToWorkerMessage, validateWorkerToMainMessage } from "../js/workers/worker-protocol.js";
+    import { factorCovariance } from "../js/monte-carlo/covariance.js";
+    import { ALIGNED_HISTORY_SOURCE, deriveAlignedLogReturns, runGbmSimulation } from "../js/monte-carlo/gbm.js";
+    import { estimateLogReturnStatistics, percentile } from "../js/monte-carlo/statistics.js";
 
     const tests = [];
     const test = (name, fn) => tests.push({ name, fn });
@@ -45,6 +51,26 @@
       horizonYears: 5,
       seed: 42,
       ...changes
+    });
+    const nearly = (actual, expected, tolerance = 1e-10, message = "Values are not sufficiently close") => {
+      if (Math.abs(actual - expected) > tolerance) throw new Error(`${message}: expected ${expected}, got ${actual}`);
+    };
+    const gbmInputs = (changes = {}) => ({
+      includedSymbols: [{ symbol: "AAA", initialValue: 100 }, { symbol: "BBB", initialValue: 200 }],
+      pathCount: 1000, horizonYears: 1, lookbackReturns: 756, seedMode: "fixed", seed: 42, ...changes
+    });
+    const datedHistory = (closes, changes = {}) => {
+      const count = Object.values(closes)[0]?.length || 0;
+      return {
+        source: ALIGNED_HISTORY_SOURCE,
+        dates: Array.from({ length: count }, (_, index) => new Date(Date.UTC(2023, 0, index + 1)).toISOString().slice(0, 10)),
+        closes,
+        ...changes
+      };
+    };
+    const fixtureHistory = () => datedHistory({
+      AAA: [100, 101, 103, 102, 105, 107],
+      BBB: [200, 202, 206, 204, 210, 214]
     });
 
     class FakeWorker {
@@ -72,6 +98,44 @@
     test("Random seed mode generates a uint32 seed", () => {
       const result = validateMonteCarloInputs(inputs({ seedMode: "random", seed: undefined }), { randomSeed: () => 0.5 });
       assert(result.valid && Number.isInteger(result.value.seed) && result.value.seed >= 0);
+    });
+    test("GBM derives up to 756 aligned log returns from 757 closes", () => {
+      const closes = { AAA: Array.from({ length: 800 }, (_, i) => 100 * Math.exp(i * .001)), BBB: Array.from({ length: 800 }, (_, i) => 200 * Math.exp(i * .002)) };
+      const derived = deriveAlignedLogReturns(gbmInputs().includedSymbols, datedHistory(closes), 756);
+      equal(derived.closeObservationCount, 757); equal(derived.observationCount, 756);
+      nearly(derived.matrix[0][0], .001); nearly(derived.matrix[1][755], .002);
+    });
+    test("GBM daily drift and covariance use arithmetic mean and sample denominator", () => {
+      const estimates = estimateLogReturnStatistics([[1, 2, 3], [2, 4, 6]]);
+      nearly(estimates.means[0], 2); nearly(estimates.variances[0], 1); nearly(estimates.covariance[0][1], 2);
+    });
+    test("Covariance Cholesky preserves positive correlation and discloses singular stabilization", () => {
+      const factor = factorCovariance([[1, .8], [.8, 1]]).factor;
+      nearly(factor[1][0], .8);
+      const singular = factorCovariance([[1, 1], [1, 1]]);
+      assert(singular.stabilization.applied); assert(singular.stabilization.diagonalJitter > 0);
+    });
+    test("Fixed-seed GBM output is exactly reproducible and retains all requested paths", () => {
+      const first = runGbmSimulation(gbmInputs(), fixtureHistory());
+      const second = runGbmSimulation(gbmInputs(), fixtureHistory());
+      equal(first.endingValueDistribution.count, 1000); equal(JSON.stringify(first), JSON.stringify(second));
+      assert(first.p10 <= first.p50 && first.p50 <= first.p90);
+      equal(first.confidenceFan.length, 253); equal(first.percentileBands.length, 253);
+    });
+    test("Percentiles and VaR use the lower ten-percent portfolio outcome", () => {
+      nearly(percentile([0, 10, 20, 30, 40], .5), 20);
+      nearly(percentile([0, 10, 20, 30, 40], .1), 4);
+      const result = runGbmSimulation(gbmInputs(), fixtureHistory());
+      nearly(result.valueAtRisk, Math.max(0, result.initialValue - result.p10));
+    });
+    test("Invalid path counts and insufficient, misaligned, nonfinite, or unprovenanced histories fail visibly", () => {
+      let invalidPathCount = false; try { runGbmSimulation(gbmInputs({ pathCount: 10 }), fixtureHistory()); } catch (error) { invalidPathCount = error.code === "MONTE_CARLO_INPUT_INVALID"; }
+      let insufficient = false; try { runGbmSimulation(gbmInputs(), datedHistory({ AAA: [100, 101], BBB: [200, 201] })); } catch (error) { insufficient = error.code === "INSUFFICIENT_HISTORY"; }
+      let misaligned = false; try { runGbmSimulation(gbmInputs(), datedHistory({ AAA: [100, 101, 102], BBB: [200, 201, 202] }, { dates: ["2023-01-01", "2023-01-01", "2023-01-03"] })); } catch (error) { misaligned = error.code === "MISALIGNED_HISTORY"; }
+      let countMismatch = false; try { runGbmSimulation(gbmInputs(), datedHistory({ AAA: [100, 101, 102], BBB: [200, 201, 202] }, { dates: ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"] })); } catch (error) { countMismatch = error.code === "MISALIGNED_HISTORY"; }
+      let nonfinite = false; try { runGbmSimulation(gbmInputs(), datedHistory({ AAA: [100, NaN, 102], BBB: [200, 201, 202] })); } catch (error) { nonfinite = error.code === "INVALID_CLOSE_HISTORY"; }
+      let provenance = false; try { runGbmSimulation(gbmInputs(), { dates: ["2023-01-01", "2023-01-02", "2023-01-03"], closes: { AAA: [100, 101, 102], BBB: [200, 201, 202] } }); } catch (error) { provenance = error.code === "HISTORY_PROVENANCE_INVALID"; }
+      assert(invalidPathCount && insufficient && misaligned && countMismatch && nonfinite && provenance);
     });
     test("Protocol rejects malformed messages in both directions", () => {
       assert(!validateMainToWorkerMessage({ protocol: MONTE_CARLO_PROTOCOL_VERSION, type: "mc:start", runId: "bad", inputs: {} }).valid);
@@ -172,6 +236,16 @@
       worker.emit(createResultMessage(start.runId, infrastructureResult()));
       equal(controller.getState().status, MONTE_CARLO_STATES.COMPLETED);
       assert(worker.terminated);
+    });
+    test("Applied covariance stabilization is recorded in Diagnostics", () => {
+      let worker; const events = [];
+      const controller = new MonteCarloController({ workerFactory: () => (worker = new FakeWorker()), diagnostics: (event) => events.push(event), now: () => 100 });
+      const start = controller.start(inputs());
+      worker.emit(createResultMessage(start.runId, infrastructureResult({
+        diagnostics: { covarianceStabilization: { applied: true, method: "bounded-diagonal-ridge-jitter", diagonalJitter: 1e-12, attempts: 1 } },
+        symbols: ["AAA", "BBB"]
+      })));
+      assert(events.some((event) => event.status === "covariance-stabilized"));
     });
     test("Dispose cancels an active run, terminates its worker, and prevents reuse", () => {
       let worker;

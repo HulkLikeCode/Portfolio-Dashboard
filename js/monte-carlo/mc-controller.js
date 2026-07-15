@@ -261,6 +261,16 @@ export class MonteCarloController {
       result,
       reason: null
     });
+    const stabilization = result?.diagnostics?.covarianceStabilization;
+    if (stabilization?.applied) {
+      this.record("covariance-stabilized", {
+        ...runMetadata(run, this.state.elapsedMs),
+        method: stabilization.method,
+        diagonalJitter: stabilization.diagonalJitter,
+        attempts: stabilization.attempts,
+        symbols: Array.isArray(result.symbols) ? result.symbols.slice() : run.inputs.includedSymbols.map(({ symbol }) => symbol)
+      });
+    }
     this.record("completed", runMetadata(run, this.state.elapsedMs));
     this.currentRun = null;
     this.destroyWorker();
