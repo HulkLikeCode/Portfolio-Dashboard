@@ -11,5 +11,18 @@
   "categories": ["finance", "productivity"],
   "lang": "en-US",
   "dir": "ltr",
-  "icons": []
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
 }

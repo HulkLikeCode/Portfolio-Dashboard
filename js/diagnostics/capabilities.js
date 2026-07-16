@@ -11,6 +11,7 @@ export async function runCapabilityChecks() {
     fetch: checkFetch(),
     promise: checkPromise(),
     echarts: checkECharts(),
+    storageManager: await checkStorageManager(),
     blobDownload: checkBlobDownload(),
     graphics: checkGraphics()
   };
@@ -114,7 +115,20 @@ export function checkECharts() {
     return available('ECharts is available.');
   }
 
-  return unavailable('info', 'ECharts is not loaded yet. This is acceptable before the charting phase.');
+  return unavailable('error', 'Vendored ECharts did not load. Charts and offline chart export are unavailable.');
+}
+
+export async function checkStorageManager() {
+  if (!navigator.storage) {
+    return unavailable('warning', 'StorageManager is unavailable. Browser storage persistence cannot be requested.');
+  }
+  try {
+    const [persisted, estimate] = await Promise.all([navigator.storage.persisted?.(), navigator.storage.estimate?.()]);
+    const usage = Number.isFinite(estimate?.usage) ? `${estimate.usage} bytes used` : 'usage unavailable';
+    return available(`StorageManager is available; persistence ${persisted ? 'granted' : 'not granted'}; ${usage}.`);
+  } catch (_) {
+    return unavailable('warning', 'StorageManager is present but its status could not be read.');
+  }
 }
 
 export function checkBlobDownload() {

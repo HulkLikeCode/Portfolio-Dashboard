@@ -32,7 +32,10 @@ historical-data pipeline, live-data services, portfolio engine, benchmark
 manager, Chart Manager, Analytics Engine, GBM and Historical Bootstrap Monte
 Carlo modules, validated Phase 8A projection visuals, and the validated Phase
 9A full portable backup and restore flow. Phase 8A validation is recorded in
-the linked test evidence; Phase 9A remains pending validation after repair. Its
+the linked test evidence; Phase 9A remains pending validation after repair.
+Phase 10A adds a vendored Apache ECharts distribution, versioned static-shell
+caching, installable icons, and StorageManager diagnostics; its target-browser
+and device acceptance remains manual. Its
 branch, pull-request, and accepted-tag lifecycle remains governed by the
 roadmap. A user-entered Finnhub key is kept only in page-session memory and
 removed from legacy Local Storage state.
@@ -73,6 +76,22 @@ pending manual/browser acceptance after the current integrity repairs.
 The Finnhub key is never portable. After restoring on the iPhone, enter a key in
 that page session only if live data is needed. The key can be edited or cleared
 from the session controls and must be entered again after a page reload.
+
+### Offline recovery
+
+After one successful online visit, the controlled service worker can relaunch
+the static application shell while offline or when GitHub Pages is unavailable.
+It never stores portfolio settings, historical records, quote responses,
+imports, backups, or credentials in Cache Storage: those remain in Local
+Storage or IndexedDB and can therefore be rendered locally when available.
+Cached quotes must be treated as stale, and live Finnhub refreshes require an
+internet connection. The Diagnostics panel distinguishes an uncontrolled shell,
+internet loss, the offline shell, and storage-persistence availability.
+
+Before clearing browser data or moving devices, export and validate a
+credential-free full portable backup. If the shell or local storage is gone,
+reopen the GitHub Pages URL online, restore the backup, and enter the Finnhub
+key separately for that new page session if live quotes are needed.
 
 ## Stable integration contracts
 

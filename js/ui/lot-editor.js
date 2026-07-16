@@ -17,7 +17,7 @@ export function openLotEditor(options) {
       <div class="portfolio-dialog__header">
         <div>
           <p class="eyebrow">${isManualAdjustment ? 'Corporate action' : 'Acquisition lot'}</p>
-          <h2 id="lot-editor-title">${lotEditorTitle(mode, options.ticker)}</h2>
+          <h2 id="lot-editor-title">${escapeHtml(lotEditorTitle(mode, options.ticker))}</h2>
         </div>
         <button class="button button--ghost" type="button" data-dialog-cancel aria-label="Close editor">Close</button>
       </div>

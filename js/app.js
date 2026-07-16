@@ -26,6 +26,7 @@ import { createConfidenceFanPreparedData } from './charts/mc-confidence-fan.js';
 import { createPercentileBandsPreparedData } from './charts/mc-percentile-bands.js';
 import { initFullBackupManager } from './ui/full-backup-manager.js';
 import { ExportManager } from './export/export-manager.js';
+import { runCapabilityChecks } from './diagnostics/capabilities.js';
 
 const APP_VERSION = '0.2.3-v2.3-phase-5a';
 const chartManagers = new Map();
@@ -49,6 +50,7 @@ function bootstrapApp() {
   initCharts();
   initConfigurationBackupControls();
   renderDependentDataState(state);
+  initRuntimeDiagnostics();
   registerServiceWorker();
   initSetupWizard();
   initFullBackupManager();
@@ -335,10 +337,128 @@ function wirePanelNavigation() {
 }
 
 function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
+  const status = document.getElementById('sw-status');
+  if (!('serviceWorker' in navigator)) {
+    if (status) status.textContent = 'Unavailable — offline shell cannot be installed.';
+    return;
+  }
 
-  navigator.serviceWorker.register('./service-worker.js').catch(() => {
-    const status = document.querySelector('[data-service-worker-status]');
-    if (status) status.textContent = 'Service worker registration failed';
+  navigator.serviceWorker.register('./service-worker.js').then((registration) => {
+    if (status) status.textContent = navigator.serviceWorker.controller
+      ? 'Active — static shell is available offline after this visit.'
+      : 'Installed — reload once to place this page under service-worker control.';
+    const announceUpdate = () => {
+      if (!registration.waiting) return;
+      if (status) status.textContent = 'Update downloaded — reload to activate the new offline shell.';
+      document.dispatchEvent(new CustomEvent('mvp:service-worker-update-ready'));
+    };
+    registration.addEventListener('updatefound', () => {
+      registration.installing?.addEventListener('statechange', announceUpdate);
+    });
+    announceUpdate();
+  }).catch(() => {
+    if (status) status.textContent = 'Registration failed — offline shell unavailable.';
   });
+}
+
+function initRuntimeDiagnostics() {
+  const availability = document.getElementById('runtime-availability-status');
+  const persisted = document.getElementById('storage-persisted-status');
+  const estimate = document.getElementById('storage-estimate-status');
+  const warning = document.querySelector('[data-storage-warning]');
+  const persistButton = document.querySelector('[data-storage-persist]');
+
+  const setAvailability = () => {
+    const controlled = Boolean(navigator.serviceWorker?.controller);
+    const state = navigator.onLine
+      ? (controlled ? 'Internet available; Pages host and Finnhub are checked separately. Cached local history remains available.' : 'Internet available; offline shell is not controlling this page yet.')
+      : (controlled ? 'Internet unavailable — offline shell active; local history and cached quotes may be available and stale.' : 'Internet unavailable — this page has no controlled offline shell.');
+    if (availability) availability.textContent = state;
+    if (navigator.onLine) checkPagesReachability();
+  };
+
+  const checkPagesReachability = async () => {
+    try {
+      const probe = new URL('./manifest.json', window.location.href);
+      probe.searchParams.set('__pages_healthcheck', Date.now().toString());
+      const response = await fetch(probe, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (availability) availability.textContent = 'Internet and GitHub Pages host available. Finnhub availability is reported separately; local history remains local.';
+    } catch (_) {
+      const controlled = Boolean(navigator.serviceWorker?.controller);
+      if (availability) availability.textContent = controlled
+        ? 'GitHub Pages host unavailable — offline shell and local history may still be available; app updates and uncached assets are unavailable.'
+        : 'GitHub Pages host unavailable — no controlled offline shell is available on this page.';
+    }
+  };
+
+  const refreshStorage = async () => {
+    if (!navigator.storage) {
+      if (persisted) persisted.textContent = 'Unavailable — this browser does not expose StorageManager.';
+      if (estimate) estimate.textContent = 'Unavailable.';
+      if (warning) warning.textContent = 'Persistent storage cannot be requested here. Keep a credential-free full portable backup.';
+      if (persistButton) persistButton.disabled = true;
+      return;
+    }
+    try {
+      const [isPersisted, storageEstimate] = await Promise.all([
+        navigator.storage.persisted?.(),
+        navigator.storage.estimate?.()
+      ]);
+      if (persisted) persisted.textContent = isPersisted
+        ? 'Granted — browser marks local data as persistent.'
+        : 'Not granted — browser may evict local data when storage is constrained.';
+      if (estimate) estimate.textContent = Number.isFinite(storageEstimate?.quota)
+        ? `${formatBytes(storageEstimate?.usage)} used of ${formatBytes(storageEstimate.quota)} estimated quota.`
+        : 'Unavailable — browser did not provide an estimate.';
+      if (warning) warning.textContent = isPersisted
+        ? 'Persistent storage is granted. Continue making credential-free backups before device changes.'
+        : 'Persistent storage is not granted. Request it below and keep a credential-free full portable backup.';
+      if (persistButton) persistButton.disabled = typeof navigator.storage.persist !== 'function' || Boolean(isPersisted);
+    } catch (_) {
+      if (persisted) persisted.textContent = 'Unavailable — persistence status could not be read.';
+      if (estimate) estimate.textContent = 'Unavailable — storage estimate could not be read.';
+      if (warning) warning.textContent = 'Storage status is unavailable. Keep a credential-free full portable backup.';
+    }
+  };
+
+  persistButton?.addEventListener('click', async () => {
+    if (typeof navigator.storage?.persist !== 'function') return;
+    persistButton.disabled = true;
+    try { await navigator.storage.persist(); } finally { await refreshStorage(); }
+  });
+  window.addEventListener('online', setAvailability);
+  window.addEventListener('offline', setAvailability);
+  window.addEventListener('mvp:live-data-status', (event) => {
+    const detail = event.detail || {};
+    if (!availability) return;
+    const state = detail.state || detail.availability;
+    if (state === 'stale') availability.textContent = 'Finnhub unavailable — cached quote data is available but stale. Local history remains available separately.';
+    else if (state === 'offline') availability.textContent = 'Finnhub unavailable because internet access is unavailable; local history and cached quotes may still render.';
+    else if (state) availability.textContent = `Finnhub ${String(state).replaceAll('-', ' ')}. GitHub Pages and local-history status are separate.`;
+  });
+  navigator.serviceWorker?.addEventListener('controllerchange', setAvailability);
+  setAvailability();
+  refreshStorage();
+  populateCapabilityDiagnostics();
+}
+
+async function populateCapabilityDiagnostics() {
+  const report = await runCapabilityChecks();
+  const ids = {
+    localStorage: 'capability-local-storage', indexedDB: 'capability-indexed-db',
+    webWorkers: 'capability-web-workers', fetch: 'capability-fetch', echarts: 'capability-echarts'
+  };
+  Object.entries(ids).forEach(([key, id]) => {
+    const node = document.getElementById(id);
+    if (node && report.checks[key]) node.textContent = report.checks[key].message;
+  });
+}
+
+function formatBytes(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 ** 2)).toFixed(1)} MB`;
 }
