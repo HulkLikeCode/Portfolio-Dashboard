@@ -3989,11 +3989,10 @@ Requirements:
 3. Implement lightweight configuration backup and restore separately from full portable backup.
 4. Exclude Finnhub credentials from PNGs, configuration backups, full backups, filenames, metadata, logs, and diagnostics.
 5. Do not implement CSV export or Print-to-PDF reporting.
-6. Implement backup reminders: 30 calendar days or 10 saved edits since last backup, whichever occurs first, with a 30-day dismissal.
-7. Record safe export failures in Diagnostics.
-8. Edit the authorized workspace files directly and add manual tests.
+6. Record safe export failures in Diagnostics.
+7. Edit the authorized workspace files directly and list manual browser tests.
 
-Edit only the authorized files in the current workspace, preserve unrelated changes, and report the complete changed-file list. Do not create a replacement project ZIP.
+Edit authorized files, preserve unrelated changes, and report the complete changed-file list. Do not create a replacement project ZIP.
 ```
 
 ## Canonical audit prompt
@@ -4004,8 +4003,6 @@ Audit Phase 9B against requirements.md Version 2.3.
 Check:
 - PNG integration works for every chart and preserves visible context.
 - Configuration backup is distinct from full portable backup.
-- API key is excluded from every output and metadata surface.
-- CSV and Print-to-PDF controls, modules, and deliverables are absent.
 - Backup reminder triggers follow the exact rules.
 - Export errors are visible and safe.
 
@@ -4015,10 +4012,7 @@ Required output:
 - Requirement traceability.
 - Changed-file list.
 - Automated test results.
-- Manual tests still required.
-- Known limitations.
-- No-new-features confirmation.
-- Exact repairs and retest steps.
+- Perform exact repairs and retest steps.
 ```
 
 ## Manual test checklist
@@ -4198,10 +4192,10 @@ Tasks:
 17. Benchmark approximately 8, 13, and 25 active symbols on the Mac without silently reducing correctness.
 18. Test application update after service-worker cache-version change.
 19. Test recovery documentation and credential-free restore.
-20. Confirm public GitHub Pages hosting and remote access work; optional cloud synchronization and router forwarding remain in scope without adding a backend.
+20. Confirm public GitHub Pages hosting at https://hulklikecode.github.io/Portfolio-Dashboard/ and remote access work; optional cloud synchronization and router forwarding remain in scope without adding a backend.
 21. Save final performance, compatibility, and acceptance notes.
 
-Edit only the authorized files in the current workspace, preserve unrelated changes, and report the complete changed-file list. Do not create a replacement project ZIP.
+report the complete changed-file list. list manual browser tests for me to confirm builld.
 ```
 
 ## Canonical audit prompt
